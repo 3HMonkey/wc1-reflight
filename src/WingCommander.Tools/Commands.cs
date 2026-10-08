@@ -92,7 +92,7 @@ internal sealed class ToolOptions
     private static readonly HashSet<string> ValueOptions = new(StringComparer.OrdinalIgnoreCase)
     {
         "game", "out", "length", "frame", "section", "seconds", "rate", "palette", "scale", "count", "series", "campaign", "part",
-        "at", "input", "args", "smooth", "colour", "ttf", "hd",
+        "at", "input", "args", "smooth", "colour", "ttf", "hd", "gpu", "filter",
     };
 
     private ToolOptions(string command, List<string> positionals, Dictionary<string, string> named, HashSet<string> flags)

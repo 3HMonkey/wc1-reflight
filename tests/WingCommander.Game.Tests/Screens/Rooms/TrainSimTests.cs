@@ -6,9 +6,9 @@ using WingCommander.Tests;
 namespace WingCommander.Game.Tests.Screens.Rooms;
 
 /// <summary>
-/// The TrainSim menus around the arcade flight. The flight itself is still the coordinator's
-/// placeholder (FlyTrainSimMissionAsync shows "not ported" until a key and reports a loss), so
-/// every session here ends with Game Over after the first enemy.
+/// The TrainSim menus around the arcade flight. This project has no flight layer, so the flight
+/// is the game's placeholder (FlyTrainSimMissionAsync shows "not ported" until a key and reports
+/// a loss): every session here ends with Game Over after the first enemy.
 /// </summary>
 public class TrainSimTests
 {

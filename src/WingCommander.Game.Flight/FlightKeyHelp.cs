@@ -8,6 +8,7 @@ namespace WingCommander.Game.Flight;
 /// port implements them (docs/analysis/flight-ui.md §2). Labels are kept short so the reference
 /// fits the side margins of a 16:9 window at a readable size. The training simulator skips the
 /// first key table (views, comm, autopilot, eject, wingman orders, video, message speed, nav map).
+/// Esc opens the pause menu (ADR-015) unless the original behaviour is kept (--ks-literal).
 /// </summary>
 public static class FlightKeyHelp
 {
@@ -81,6 +82,17 @@ public static class FlightKeyHelp
 
     private static readonly KeyHelpSection Game = new("GAME",
     [
+        new("Esc", "Menu"),
+        new("P", "Pause"),
+        new("Ctrl+E", "Eject"),
+        new("Ctrl+S", "Sound"),
+        new("Ctrl+M", "Music"),
+        new("Alt+X", "Quit"),
+        new("F10", "Hide help"),
+    ]);
+
+    private static readonly KeyHelpSection LiteralGame = new("GAME",
+    [
         new("P", "Pause"),
         new("Ctrl+E", "Eject"),
         new("Ctrl+S", "Sound"),
@@ -90,6 +102,15 @@ public static class FlightKeyHelp
     ]);
 
     private static readonly KeyHelpSection TrainingGame = new("SIMULATOR",
+    [
+        new("Esc", "Menu, end"),
+        new("P", "Pause"),
+        new("Ctrl+S", "Sound"),
+        new("Ctrl+M", "Music"),
+        new("F10", "Hide help"),
+    ]);
+
+    private static readonly KeyHelpSection LiteralTrainingGame = new("SIMULATOR",
     [
         new("P", "Pause"),
         new("Esc", "End"),
@@ -102,7 +123,25 @@ public static class FlightKeyHelp
     public static IReadOnlyList<KeyHelpSection> Campaign { get; } =
         [Steering, Navigation, Weapons, Displays, Wingman, Views, Mouse, Game];
 
+    /// <summary>Campaign flight with the original Esc (no pause menu).</summary>
+    public static IReadOnlyList<KeyHelpSection> CampaignLiteral { get; } =
+        [Steering, Navigation, Weapons, Displays, Wingman, Views, Mouse, LiteralGame];
+
     /// <summary>The training simulator.</summary>
     public static IReadOnlyList<KeyHelpSection> TrainingSimulator { get; } =
         [Steering, Weapons, TrainingDisplays, Mouse, TrainingGame];
+
+    /// <summary>The training simulator with the original Esc (ends the simulation at once).</summary>
+    public static IReadOnlyList<KeyHelpSection> TrainingSimulatorLiteral { get; } =
+        [Steering, Weapons, TrainingDisplays, Mouse, LiteralTrainingGame];
+
+    /// <summary>The reference for a flight in the campaign or the simulator, with or without the pause menu on Esc.</summary>
+    public static IReadOnlyList<KeyHelpSection> For(bool trainingSimulator, bool escapeOpensMenu) =>
+        (trainingSimulator, escapeOpensMenu) switch
+        {
+            (true, true) => TrainingSimulator,
+            (true, false) => TrainingSimulatorLiteral,
+            (false, true) => Campaign,
+            (false, false) => CampaignLiteral,
+        };
 }

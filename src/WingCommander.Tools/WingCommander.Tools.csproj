@@ -13,6 +13,7 @@
     <ProjectReference Include="..\WingCommander.Simulation\WingCommander.Simulation.csproj" />
     <ProjectReference Include="..\WingCommander.Game\WingCommander.Game.csproj" />
     <ProjectReference Include="..\WingCommander.Game.Flight\WingCommander.Game.Flight.csproj" />
+    <ProjectReference Include="..\WingCommander.Render.Vulkan\WingCommander.Render.Vulkan.csproj" />
   </ItemGroup>
 
   <!-- Licences of the bundled third-party code and fonts (ymfm, Tektur, SPACE WING LEADER, CHAWP). -->

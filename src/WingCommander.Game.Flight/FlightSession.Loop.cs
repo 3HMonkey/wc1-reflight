@@ -77,7 +77,7 @@ internal sealed partial class FlightSession
         events.PointerMovedByKeyboard = true;
         _previousSystemKey = events.SystemKeyDown;
         bool frameReady = true;
-        Game.ShowKeyHelp(FlightKeyHelp.Title, sim.TrainSimActive ? FlightKeyHelp.TrainingSimulator : FlightKeyHelp.Campaign);
+        Game.ShowKeyHelp(FlightKeyHelp.Title, FlightKeyHelp.For(sim.TrainSimActive, Options.EscapePausesFlight));
 
         try
         {

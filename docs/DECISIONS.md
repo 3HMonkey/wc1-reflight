@@ -53,6 +53,9 @@ The emulator sits behind an `IOplChip` interface. Source: `reference/wc1-re/thir
 Accepted 2026-10-07. `WC1_GAME_DIR` env var or the repository's `config.json` (since 2026-10-08).
 `[DataFact]`/`[DataTheory]` skip when the data is missing so CI without data still passes.
 Never commit game data or files derived from it (exported PNG/WAV stay outside the repo).
+Exception (user decision 2026-10-08): the README screenshots in `docs/images/`, rendered by
+`scripts/readme-screenshots.py`; they show game art (copyright Electronic Arts), as noted in
+the README. No other exports, sprites or sounds.
 
 ## ADR-007: Gameplay numbers follow the Kilrathi Saga reconstruction
 Accepted 2026-10-07. The reference reconstructs the 1996 Win32 Kilrathi Saga executable.

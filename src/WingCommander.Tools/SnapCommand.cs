@@ -3,10 +3,12 @@ using WingCommander.Core.Imaging;
 using WingCommander.Core.Numerics;
 using WingCommander.Core.Platform;
 using WingCommander.Core.Rendering;
+using WingCommander.Core.Resources;
 using WingCommander.Game;
 using WingCommander.Game.Config;
 using WingCommander.Game.Flight;
 using WingCommander.Game.Runtime;
+using WingCommander.Render.Vulkan;
 
 namespace WingCommander.Tools;
 
@@ -17,7 +19,9 @@ internal static partial class Commands
     /// <summary>
     /// Runs the game headless on the virtual clock (seeded rand, optional scripted input) and
     /// writes the displayed frame as PNG at each requested time. Deterministic, so it doubles as
-    /// a regression tool for screens.
+    /// a regression tool for screens. <c>--hd WxH</c> adds the CPU reference of the
+    /// output-resolution text; <c>--gpu WxH</c> renders each frame with the Vulkan renderer
+    /// offscreen (sprite space view, text and key help, like the window).
     /// </summary>
     private static int SnapCommand(ToolOptions o)
     {
@@ -26,26 +30,54 @@ internal static partial class Commands
         System.IO.Directory.CreateDirectory(outDir);
         double[] times = (o.Option("at") ?? "1000").Split(",", SplitClean)
             .Select(s => double.Parse(s, CultureInfo.InvariantCulture)).Order().ToArray();
+        var hd = ParseSize(o.Option("hd"));
+        var gpu = ParseSize(o.Option("gpu"));
 
-        (int Width, int Height)? hd = null;
-        if (o.Option("hd") is { } size)
+        using VulkanRenderer? renderer = gpu is var (gpuWidth, gpuHeight) ? CreateSnapRenderer(o, gpuWidth, gpuHeight) : null;
+        // A fresh user data directory per run: saved games and settings (wc1.cfg) from earlier runs
+        // would change what the run shows.
+        string userData = Path.Combine(Path.GetTempPath(), "wc1tool-snap", Guid.NewGuid().ToString("N"));
+        try
         {
-            string[] parts = size.Split('x', SplitClean);
-            hd = (int.Parse(parts[0], CultureInfo.InvariantCulture), int.Parse(parts[1], CultureInfo.InvariantCulture));
+            return Snap(o, directory, outDir, times, hd, renderer, userData);
         }
+        finally
+        {
+            try
+            {
+                System.IO.Directory.Delete(userData, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
 
-        var host = new HeadlessServices { UserDataDirectory = Path.Combine(Path.GetTempPath(), "wc1tool-snap") };
+    private static int Snap(ToolOptions o, GameDirectory directory, string outDir, double[] times, (int Width, int Height)? hd,
+        VulkanRenderer? renderer, string userData)
+    {
+        var host = new HeadlessServices { UserDataDirectory = userData };
         var runtime = new GameRuntime(host, new CRandom(1));
         var game = new Wc1Game(runtime, directory, new Wc1GameOptions
         {
             Audio = o.Has("audio"),
             SkipIntro = o.Has("skip-intro"),
             Arguments = (o.Option("args") ?? "").Split(" ", SplitClean),
-            HighResolutionText = hd is not null,
-            ReplacementFonts = o.Has("original-fonts") ? new Dictionary<int, ReplacementFont>() : BundledFonts.Load(),
+            HighResolutionText = hd is not null || renderer is { SupportsText: true },
+            ReplacementFonts = BundledFonts.Load(),
+            ModernFontsOverride = o.Has("original-fonts") ? false : null,
+            SharpTextOverride = o.Has("classic-text") ? false : null,
+            Display = renderer is null ? null : new SnapDisplay(renderer),
         });
-        // The flight layer draws every sprite on the CPU here (no R2 renderer), so the PNGs show the classic frame.
-        game.FlightLayer = new FlightLayer(game);
+        // Without --gpu (or with --classic-space) the flight layer draws every sprite on the CPU, so
+        // the PNGs show the classic frame.
+        game.FlightLayer = new FlightLayer(game, new FlightOptions
+        {
+            RendererSupportsSpaceSprites = renderer is { SupportsSpaceSprites: true } && !o.Has("classic-space"),
+        });
         foreach (var (at, e) in ParseInputScript(o.Option("input")))
             runtime.Events.EnqueueHostEvent(e, at);
         game.Start();
@@ -68,12 +100,53 @@ internal static partial class Commands
                 ReferenceCompositor.Render(runtime.Frame, width, height, AspectMode.FourByThree, rgba);
                 Png.WriteRgba(Path.ChangeExtension(path, null) + "_hd.png", width, height, rgba);
             }
+            if (renderer is not null)
+            {
+                renderer.Render(runtime.Frame);
+                var image = renderer.CaptureLastFrame();
+                Png.WriteRgba(Path.ChangeExtension(path, null) + "_gpu.png", image.Width, image.Height, image.Rgba);
+            }
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"{runtime.Scheduler.Now,9:0} ms  presents {game.Display.SlamCount,5}  {(finished ? "finished" : "running ")}  {path}"));
             if (finished)
                 break;
         }
         return 0;
+    }
+
+    /// <summary>An offscreen Vulkan renderer with the window's settings (--filter, --square-pixels, --integer).</summary>
+    private static VulkanRenderer CreateSnapRenderer(ToolOptions o, int width, int height)
+    {
+        var settings = new RendererSettings();
+        if (o.Option("filter") is { } filter)
+            settings.Filter = UserSettings.ParseFilter(filter) ?? throw new FormatException($"unknown filter '{filter}'");
+        if (o.Has("square-pixels"))
+            settings.Aspect = AspectMode.SquarePixels;
+        if (o.Has("integer"))
+            settings.IntegerScaling = true;
+        var renderer = VulkanRenderer.CreateOffscreen(width, height, settings,
+            new VulkanRendererOptions { Validation = ValidationMode.Disabled, Log = static (_, _) => { } });
+        Console.WriteLine($"Renderer: {renderer.Name}");
+        return renderer;
+    }
+
+    /// <summary>The settings menu's display rows act on the offscreen renderer; fullscreen is only remembered.</summary>
+    private sealed class SnapDisplay(VulkanRenderer renderer) : IDisplayControl
+    {
+        public RendererSettings Renderer => renderer.Settings;
+
+        public bool Fullscreen { get; set; }
+    }
+
+    /// <summary>"WxH" (e.g. 1920x1080), or null.</summary>
+    private static (int Width, int Height)? ParseSize(string? size)
+    {
+        if (size is null)
+            return null;
+        string[] parts = size.Split('x', SplitClean);
+        if (parts.Length != 2)
+            throw new FormatException($"expected WxH, got '{size}'");
+        return (int.Parse(parts[0], CultureInfo.InvariantCulture), int.Parse(parts[1], CultureInfo.InvariantCulture));
     }
 
     /// <summary>

@@ -63,9 +63,15 @@ wc1 [--game <dir>] [--scale N] [--fullscreen|--window] [--filter nearest|sharp|l
 - Saves and settings live in the user data directory (Windows:
   `%APPDATA%\Origin Systems\Wing Commander\`), see ADR-011.
 
-`wc1tool snap --at ms,... [--input "ms key 0x39 [vk]; ms click x y"] [--audio] [--skip-intro]
-[--hd WxH] [--original-fonts]` runs the game headless on the virtual clock and saves PNGs of the
-displayed frame; with `--hd` also the output-resolution text and key help (CPU reference).
+`wc1tool snap --at ms,... [--input "ms key 0x39 [vk]; ms click x y; ms move x y"] [--audio]
+[--skip-intro] [--args "switches"] [--hd WxH] [--gpu WxH] [--original-fonts] [--classic-text]
+[--classic-space]` runs the game headless on the virtual clock (a fresh user data folder per run)
+and saves PNGs of the displayed 320x200 frame; with `--hd` also the output-resolution text and key
+help (CPU reference); with `--gpu` every frame rendered offscreen by the Vulkan renderer like the
+window (sprites, text, key help; `--filter`, `--square-pixels`, `--integer` as in wc1; the
+settings menu's display rows act on it). The runs are deterministic: the same command gives the
+same pictures. `scripts/readme-screenshots.py` (Python 3 with Pillow) uses it to regenerate the
+README screenshots in `docs/images/`.
 `wc1tool hd-text <font> ["text"] [--ttf font.ttf]` compares classic and output-resolution glyphs;
 `wc1tool font-metrics <font>` prints cell widths and ink extents.
 

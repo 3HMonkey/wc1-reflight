@@ -1,5 +1,7 @@
 # WC1 Reflight
 
+![Confed fighters and a Kilrathi fighter under fire in the chase view, rendered at 1920x1080](docs/images/space-combat.png)
+
 *Wing Commander* (Origin Systems, 1990) for today's computers: a native, cross-platform
 reimplementation in C# / .NET 10 that plays the original DOS game data, with a modern Vulkan
 renderer, sharp ships and text at any screen resolution, and the original music and gameplay.
@@ -20,12 +22,53 @@ renderer, sharp ships and text at any screen resolution, and the original music 
 | Menus | None | **Esc** opens a pause menu (in flight, in the rooms and on the title) with **settings**: volumes, fullscreen, filter, aspect ratio, vsync, sharp text, fonts, key help; saved in `config.json` |
 | Sound | AdLib / Sound Blaster | The original Origin FX music and sound effects on an emulated OPL2 (port of ymfm) |
 | Saves | Next to the game | In your user data folder; existing DOS saves are imported automatically |
-| Controls | DOS keyboard repeat | Key repeat identical on every system, Alt+X quits anywhere, Esc pauses during flight |
+| Controls | DOS keyboard repeat | Key repeat identical on every system, Alt+X quits anywhere |
 | Fixes | | Planets drawn as sprites, cockpit display static and cockpit explosion animation restored (`--ks-literal` returns to the Kilrathi Saga look) |
 
 Gameplay, simulation, AI and timing follow the reverse-engineered Kilrathi Saga build
 ([neuromancer/wc1-re](https://github.com/neuromancer/wc1-re)), running on a deterministic
 virtual clock: the same input gives the same mission, which also makes the whole game testable.
+
+### Side by side
+
+The same moment, rendered at 1440x1080 by the original 320x200 path and by WC1 Reflight.
+Ships, shots and explosions keep their detail instead of being shrunk into 320x200 first:
+
+![Ships: the original 320x200 picture scaled up next to WC1 Reflight](docs/images/compare-ships.png)
+
+Text is drawn at screen resolution, here in the replacement font of conversations and briefings:
+
+![Subtitle text: the original pixel font scaled up next to the sharp replacement font](docs/images/compare-text.png)
+
+### In the game
+
+![Cockpit in flight: sharp cockpit displays and radio message, the flight controls (F10) in the side margins of a 16:9 screen](docs/images/cockpit-key-help.png)
+
+*Cockpit at 1920x1080: radio messages and cockpit displays at screen resolution, the key help
+(F10) in the side margins.*
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/pause-menu.png" alt="The pause menu over the cockpit"></td>
+    <td width="50%"><img src="docs/images/settings.png" alt="The settings page of the pause menu"></td>
+  </tr>
+  <tr>
+    <td><em>Esc opens the pause menu in flight, in the rooms and on the title.</em></td>
+    <td><em>Settings apply at once and are saved in <code>config.json</code>.</em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/conversation.png" alt="Paladin in the bar, subtitle in the Tektur font"></td>
+    <td width="50%"><img src="docs/images/kill-board.png" alt="The kill board in the bar in the CHAWP chalk font"></td>
+  </tr>
+  <tr>
+    <td><em>Conversations and briefings in Tektur.</em></td>
+    <td><em>The kill board in the CHAWP chalk font.</em></td>
+  </tr>
+</table>
+
+The screenshots are rendered by [`scripts/readme-screenshots.py`](scripts/readme-screenshots.py)
+from a scripted, headless run of the game (`wc1tool snap --gpu`). They show game art, which is
+copyright Electronic Arts.
 
 ## Getting started
 
@@ -81,6 +124,8 @@ the game):
 | 1 and 2 | HUD messages, cockpit displays, speed readouts, nav map, training simulator | **SPACE WING LEADER** by SFO, made with [FontStruct](https://fontstruct.com/fontstructions/show/2704307), licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | 3 | chalk board (kill board) in the rec room | **CHAWP**, copyright (c) 2013 Ancient Wisdom Productions ([awpny.com](http://www.awpny.com)), Reserved Font Name CHAWP, licensed under the [SIL Open Font License 1.1](https://openfontlicense.org) |
 
+![The kill board: original chalk font next to CHAWP](docs/images/compare-kill-board.png)
+
 The replacement glyphs are fitted into the original glyph cells, so the game's text layout is
 unchanged; characters a font does not have and the gauge symbols of font 2 keep the original
 design, vectorized. The classic 320x200 picture (SDL renderer, `--classic-text`) always shows
@@ -101,6 +146,7 @@ src/WingCommander                 the game executable (wc1)
 src/WingCommander.Tools           wc1tool: data inspection, exports, headless screenshots
 tests/                            xunit tests per project (game-data tests run when config.json is set)
 docs/                             architecture, decisions, analysis of the original, progress
+docs/images/                      README screenshots (scripts/readme-screenshots.py)
 ```
 
 Start with [docs/README.md](docs/README.md) for the architecture, the analysis of the original
