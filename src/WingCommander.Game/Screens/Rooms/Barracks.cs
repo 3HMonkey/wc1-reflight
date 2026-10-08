@@ -167,7 +167,13 @@ internal sealed class Barracks
             {
                 events.ClearInputKeyStatePreservingModifiers();
                 short key = unchecked((short)e.Value);
-                if (key is 0x1c or 0x39)
+                if (key == 0x01)
+                {
+                    // Esc: the port's pause menu (settings, quit); the rooms had no use for Esc.
+                    await game.ShowPauseMenuAsync(PauseMenuContext.Menu);
+                    events.EscapePressed = false;
+                }
+                else if (key is 0x1c or 0x39)
                     clicked = true;
                 else if (key == 0x24)
                 {

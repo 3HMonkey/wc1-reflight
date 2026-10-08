@@ -2,6 +2,7 @@ using WingCommander.Core.Resources;
 using WingCommander.Game.Input;
 using WingCommander.Graphics.Palettes;
 using WingCommander.Graphics.Shapes;
+using WingCommander.Game.Screens.Ui;
 
 namespace WingCommander.Game.Screens;
 
@@ -128,6 +129,11 @@ public sealed class TitleSequence(Wc1Game game)
                 short key = unchecked((short)e.Value);
                 switch (key)
                 {
+                    case 0x01: // Esc: the port's pause menu (settings, quit)
+                        await game.ShowPauseMenuAsync(PauseMenuContext.Menu);
+                        events.EscapePressed = false;
+                        events.KeyEventQueueEnabled = false;
+                        continue;
                     case 0x1c: // Enter
                     case 0x1f: // S
                     case 0x2e: // C

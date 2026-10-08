@@ -22,6 +22,10 @@ public static class RepositoryAssets
     /// <summary>CHAWP (font 3, the chalk board).</summary>
     public static string Chawp => Locate("fonts", "chawp", "chawp.ttf");
 
+    /// <summary>A file relative to the repository root.</summary>
+    public static string InRepository(params string[] parts) =>
+        System.IO.Path.Combine([Root.Value ?? throw new InvalidOperationException("Repository root not found."), .. parts]);
+
     public static string Locate(params string[] parts) =>
         System.IO.Path.Combine([Root.Value ?? throw new InvalidOperationException("Repository root not found."), "assets", .. parts]);
 }

@@ -156,6 +156,26 @@ Accepted 2026-10-07 (open questions of `analysis/flight-ui.md` §8.2).
   cinematic is UI; every missing presentation effect (warp flash, phase-3 cockpit messages) is
   an `ISimulationEvents` member.
 
+## ADR-015: Pause menu and settings in config.json
+Accepted 2026-10-08 (user request: "a pause menu with settings on Esc").
+
+- **Esc opens the pause menu** where the original had no use for it: campaign flight (instead of
+  the "GAME PAUSED" banner of ADR-012), the training simulator (adds "End simulation", the
+  original's Esc), the rec room, the barracks and the title menu. Cutscenes, briefings and
+  conversations keep Esc for skipping. `--ks-literal` keeps the original flight behaviour.
+- The menu (`Screens/Ui/PauseMenu`, `SettingsMenu`, `MenuSession`) is a game screen drawn into
+  the 320x200 frame with font 0, so it works with every renderer and in headless tests, and the
+  output-resolution text shows it in the replacement font. It saves and restores the picture,
+  the cursor and the input state; the flight stands still while it is open.
+- **Settings**: music and sound volume, fullscreen, picture filter, aspect ratio, vsync, sharp
+  text, fonts, key help. They apply at once (the renderer reads its settings every frame; the
+  window through `IDisplayControl`, implemented by wc1) and are saved to `config.json` in the
+  sections `audio`, `display`, `text`, `interface` (`UserSettings`, `GameConfiguration` keeps
+  unknown properties). Command-line options override the saved display settings for one run.
+  wc1.cfg keeps the original volume format and is still written; config.json wins when both
+  exist. Without a config.json, wc1 creates one next to the executable on the first save.
+- Planned next: key bindings in the `controls` section.
+
 ## ADR-014: Licence GPL-3.0
 Accepted 2026-10-08. The port translates the reconstructed C source of neuromancer/wc1-re
 (GPL-3.0): function structure, names, tables and constants. It is a derivative work and is

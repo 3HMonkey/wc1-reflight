@@ -74,9 +74,15 @@ public sealed class GameDirectory
     /// current directory itself. Returns null when nothing is found.
     /// </summary>
     /// <exception cref="InvalidDataException">A config.json was found but cannot be read.</exception>
-    public static GameDirectory? Locate(string? explicitPath = null)
+    public static GameDirectory? Locate(string? explicitPath = null) =>
+        Locate(explicitPath, GameConfiguration.Find(Directory.GetCurrentDirectory(), AppContext.BaseDirectory));
+
+    /// <summary>
+    /// Like <see cref="Locate(string?)"/> with an already loaded configuration (null = none).
+    /// </summary>
+    public static GameDirectory? Locate(string? explicitPath, GameConfiguration? configuration)
     {
-        string? configured = GameConfiguration.Find(Directory.GetCurrentDirectory(), AppContext.BaseDirectory)?.GameDirectory;
+        string? configured = configuration?.GameDirectory;
         foreach (string? candidate in new[] { explicitPath, Environment.GetEnvironmentVariable("WC1_GAME_DIR"), configured, Directory.GetCurrentDirectory() })
         {
             if (string.IsNullOrWhiteSpace(candidate) || !Directory.Exists(candidate))

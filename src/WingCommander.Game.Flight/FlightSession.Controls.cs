@@ -2,6 +2,7 @@ using WingCommander.Game.Input;
 using WingCommander.Graphics.Palettes;
 using WingCommander.Simulation.Data;
 using WingCommander.Simulation.Objects;
+using WingCommander.Game.Screens.Ui;
 
 namespace WingCommander.Game.Flight;
 
@@ -165,7 +166,11 @@ internal sealed partial class FlightSession
             case 0x01:
                 Events.EscapePressed = false;
                 if (sim.TrainSimActive)
-                    return -1;
+                {
+                    if (!Options.EscapePausesFlight)
+                        return -1;
+                    return await ShowPauseMenuAsync(PauseMenuContext.TrainingSimulator) == PauseMenuChoice.EndSimulation ? -1 : 0;
+                }
                 if (GetVduMode(1) == 4)
                 {
                     CloseCommChoiceMenu();
@@ -173,7 +178,7 @@ internal sealed partial class FlightSession
                 }
                 if (Options.EscapePausesFlight)
                 {
-                    await ShowGamePausedBannerAsync(true);
+                    await ShowPauseMenuAsync(PauseMenuContext.Flight);
                     return 0;
                 }
                 break;

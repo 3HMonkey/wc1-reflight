@@ -275,9 +275,9 @@ public class ControlsTests
     }
 
     [DataFact]
-    public void Esc_ends_a_simulator_flight()
+    public void Esc_ends_a_simulator_flight_in_the_literal_mode()
     {
-        var rig = new FlightRig(12);
+        var rig = new FlightRig(12, new FlightOptions { EscapePausesFlight = false });
         FlightResult result = FlightResult.Running;
         int frames = 0;
         rig.Start(async r =>
@@ -299,6 +299,49 @@ public class ControlsTests
                 frames++;
                 if (frames == 10)
                     KeyAt(r, new Press(0, 0x01, 0x1b), r.Runtime.Scheduler.Now);
+                if (frames == 200)
+                    session.Sim.ArcadeState = 4;
+            };
+            result = await r.Layer.FlyTrainSimMissionAsync(0);
+            flight.EndSession();
+        });
+        rig.Run();
+        Assert.Equal(FlightResult.Aborted, result);
+        Assert.InRange(frames, 10, 12);
+    }
+
+    [DataFact]
+    public void Esc_in_the_simulator_opens_the_pause_menu_which_can_end_the_simulation()
+    {
+        var rig = new FlightRig(12);
+        FlightResult result = FlightResult.Running;
+        int frames = 0;
+        rig.Start(async r =>
+        {
+            var flight = (Screens.Rooms.ITrainSimFlight)r.Layer;
+            r.Game.Events.KeyEventQueueEnabled = true;
+            r.Game.Screens.TrainSim.Mission = 0;
+            r.Game.Screens.TrainSim.ArcadeWave = 0;
+            flight.BeginSession();
+            flight.InitializeMission(0);
+            flight.BeginGetReady();
+            flight.RefreshCockpitStatus();
+            flight.DumpBufferToScreen();
+            await r.Game.Display.PresentAsync();
+            flight.EndGetReady();
+            flight.PrepareFlight(false);
+            r.Session.FramePresented = session =>
+            {
+                frames++;
+                if (frames == 10)
+                {
+                    double now = r.Runtime.Scheduler.Now;
+                    KeyAt(r, new Press(0, 0x01, 0x1b), now);
+                    // Resume, Settings, End simulation.
+                    KeyAt(r, new Press(0, 0x50, 0x28), now + 1_000);
+                    KeyAt(r, new Press(0, 0x50, 0x28), now + 1_300);
+                    KeyAt(r, new Press(0, 0x1c, 0x0d), now + 1_600);
+                }
                 if (frames == 200)
                     session.Sim.ArcadeState = 4;
             };

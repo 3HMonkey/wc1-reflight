@@ -36,13 +36,15 @@ Verified 2026-10-07: NativeAOT `wc1.exe` = 2.3 MB (game, DOS audio, Vulkan rende
 ## wc1 options
 
 ```
-wc1 [--game <dir>] [--scale N] [--fullscreen] [--filter nearest|sharp|linear] [--square-pixels]
+wc1 [--game <dir>] [--scale N] [--fullscreen|--window] [--filter nearest|sharp|linear] [--square-pixels]
     [--integer] [--no-vsync] [--renderer auto|vulkan|sdl] [--vulkan-validation]
     [--no-audio] [--skip-intro] [--classic-space] [--classic-text] [--original-fonts]
     [--ks-literal] [--frames N] [--host-check]
     [--window-test [--capture-dir <dir>]] [-- <original switches, e.g. p = no music>]
 ```
 
+- Display options given on the command line override the saved settings (`config.json`,
+  section `display`) for one run; Esc opens the pause menu with the settings (ADR-015).
 - With the Vulkan renderer, text is drawn at output resolution with the bundled replacement fonts
   (ADR-013); `--classic-text` keeps the pixel text, `--original-fonts` the vectorized originals.
   F10 toggles the key help in flight.
@@ -68,12 +70,12 @@ displayed frame; with `--hd` also the output-resolution text and key help (CPU r
 `wc1tool font-metrics <font>` prints cell widths and ink extents.
 
 
-## Known issue: NativeAOT link fails with "vswhere.exe ... nicht gefunden"
+## Known issue: NativeAOT link fails because `vswhere.exe` is not found
 
-Symptom (German Windows):
+Symptom (the wording depends on the Windows language):
 
 ```
-error MSB3073: Der Befehl ""Der Befehl "vswhere.exe" ist entweder falsch geschrieben oder;konnte nicht gefunden werden.;C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\...\link.exe" @"...link.rsp"" wurde mit dem Code 123 beendet.
+error MSB3073: The command ""'vswhere.exe' is not recognized as an internal or external command,;operable program or batch file.;C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\...\link.exe" @"...link.rsp"" exited with code 123.
 ```
 
 Cause: the ILCompiler package runs `findvcvarsall.bat`, which calls the VS 18 `vcvarsall.bat`.

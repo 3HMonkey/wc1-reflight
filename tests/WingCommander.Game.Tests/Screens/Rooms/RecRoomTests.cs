@@ -125,9 +125,13 @@ public class RecRoomTests
         rig.Click(1_200, 170, 85);
         Assert.False(rig.Runtime.RunHeadless(2_500));
         RoomsRig.Snap(rig, "recroom-talk-paladin");
-        // Leave the conversation (Esc ends a scene; the placeholder takes any key).
-        for (int i = 0; i < 6; i++)
+        // Leave the conversation (Esc ends a scene; the placeholder takes any key). Only while it runs:
+        // in the bar, Esc opens the pause menu.
+        for (int i = 0; i < 6 && rig.Game.Graphics.Screen!.Top != 0; i++)
+        {
             RoomsRig.Escape(rig, 3_000 + i * 700);
+            Assert.False(rig.Runtime.RunHeadless(3_000 + i * 700 + 650));
+        }
         Assert.False(rig.Runtime.RunHeadless(9_000));
         Assert.Null(rig.Runtime.Failure);
         RoomsRig.Snap(rig, "recroom-after-talk");

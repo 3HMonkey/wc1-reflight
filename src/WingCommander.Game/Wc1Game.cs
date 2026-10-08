@@ -12,6 +12,7 @@ using WingCommander.Game.Input;
 using WingCommander.Game.Resources;
 using WingCommander.Game.Runtime;
 using WingCommander.Game.Screens;
+using WingCommander.Game.Screens.Ui;
 using WingCommander.Game.Timing;
 using WingCommander.Game.Video;
 using WingCommander.Graphics;
@@ -44,6 +45,21 @@ public sealed class Wc1GameOptions
 
     /// <summary>Messages about optional features (missing replacement fonts); null = standard error.</summary>
     public Action<string>? Log { get; init; }
+
+    /// <summary>
+    /// The configuration file the player's settings are read from and saved to (ADR-015); null =
+    /// settings live only in memory and wc1.cfg (tests, tools).
+    /// </summary>
+    public GameConfiguration? Configuration { get; init; }
+
+    /// <summary>Runtime control of the window and renderer for the settings menu (null = headless).</summary>
+    public IDisplayControl? Display { get; init; }
+
+    /// <summary>Overrides the saved "sharp text" setting for this run (command line); null = use the setting.</summary>
+    public bool? SharpTextOverride { get; init; }
+
+    /// <summary>Overrides the saved "modern fonts" setting for this run (command line); null = use the setting.</summary>
+    public bool? ModernFontsOverride { get; init; }
 }
 
 /// <summary>
@@ -122,6 +138,18 @@ public sealed class Wc1Game
     /// <summary>Volume settings shared with the audio layer (mirrors <see cref="Settings"/>).</summary>
     public AudioVolumeSettings Volumes { get; } = new();
 
+    /// <summary>The player's settings of the pause menu (ADR-015), stored in config.json.</summary>
+    public UserSettings Preferences { get; private set; } = new();
+
+    /// <summary>Runtime control of the window and renderer (null in headless runs).</summary>
+    public IDisplayControl? DisplayControl => _options.Display;
+
+    /// <summary>True when the renderer draws text at output resolution (the "sharp text" setting applies).</summary>
+    public bool SupportsSharpText => Display.TextTracker is not null;
+
+    /// <summary>True when replacement fonts are available (the "fonts" setting applies).</summary>
+    public bool SupportsModernFonts => SupportsSharpText && _options.ReplacementFonts.Count > 0;
+
     /// <summary>DOS audio (null when started without audio).</summary>
     public GameAudio? Audio { get; private set; }
 
@@ -166,18 +194,61 @@ public sealed class Wc1Game
         UpdateKeyHelpVisibility();
     }
 
-    /// <summary>F10: the player's choice whether the key help is shown (saved in wc1.cfg).</summary>
-    public void ToggleKeyHelp()
+    /// <summary>F10: the player's choice whether the key help is shown (saved with the settings).</summary>
+    public void ToggleKeyHelp() => SetKeyHelp(!Preferences.KeyHelp);
+
+    /// <summary>Shows or hides the key help (while a layer provides it) and saves the choice.</summary>
+    public void SetKeyHelp(bool visible)
     {
-        Settings.KeyHelp = !Settings.KeyHelp;
-        Settings.Save();
+        Preferences.KeyHelp = visible;
+        SaveSettings();
         UpdateKeyHelpVisibility();
     }
 
     private void UpdateKeyHelpVisibility()
     {
         if (KeyHelp is { } help)
-            help.Visible = _keyHelpActive && Settings.KeyHelp;
+            help.Visible = _keyHelpActive && Preferences.KeyHelp;
+    }
+
+    /// <summary>
+    /// Opens the port's pause menu (Esc; ADR-015) over the current picture: resume, settings, end
+    /// simulation (training simulator), quit.
+    /// </summary>
+    public Task<PauseMenuChoice> ShowPauseMenuAsync(PauseMenuContext context) => PauseMenu.ShowAsync(this, context);
+
+    /// <summary>Turns the output-resolution text on or off (no effect without a supporting renderer).</summary>
+    public void SetSharpText(bool sharp)
+    {
+        Preferences.SharpText = sharp;
+        if (Display.TextTracker is not { } tracker)
+            return;
+        tracker.Enabled = sharp;
+        Runtime.Frame.Text = sharp ? Display.Text : null;
+    }
+
+    /// <summary>Switches between the bundled replacement fonts and the vectorized originals.</summary>
+    public void SetModernFonts(bool modern)
+    {
+        Preferences.ModernFonts = modern;
+        if (Glyphs is not { } glyphs)
+            return;
+        foreach (var (fontIndex, font) in _options.ReplacementFonts)
+        {
+            if (!modern)
+            {
+                glyphs.SetReplacement(fontIndex, null);
+                continue;
+            }
+            try
+            {
+                glyphs.SetReplacement(fontIndex, TrueTypeFont.Load(font.Data.Span), font.Name);
+            }
+            catch (Exception e) when (e is InvalidDataException or NotSupportedException or IndexOutOfRangeException or ArgumentException)
+            {
+                (_options.Log ?? Console.Error.WriteLine)($"Replacement font for font {fontIndex} not used ({font.Name}): {e.Message}");
+            }
+        }
     }
 
     /// <summary>
@@ -240,8 +311,18 @@ public sealed class Wc1Game
     {
         // Settings and switches (CheckLauncherAndConfig, LoadWingCmdrCfgFile, the argument loop).
         Settings = GameSettings.Load(Runtime.Host.UserDataDirectory);
-        Volumes.MusicVolume = Settings.MusicVolume;
-        Volumes.SfxVolume = Settings.SfxVolume;
+        // config.json wins; wc1.cfg supplies what it does not have yet (older installs).
+        var defaults = new UserSettings
+        {
+            MusicVolume = Settings.MusicVolume / 2,
+            SoundVolume = Settings.SfxVolume / 2,
+            KeyHelp = Settings.KeyHelp,
+        };
+        if (_options.Display is { } display)
+            defaults.CaptureFrom(display);
+        Preferences = UserSettings.Read(_options.Configuration, defaults);
+        Volumes.MusicVolume = Preferences.MusicVolume * 2;
+        Volumes.SfxVolume = Preferences.SoundVolume * 2;
         var configTokens = StartupOptions.ReadConfigTokens(Directory);
         Options.ApplyLauncherConfig(Settings.Cheater, configTokens);
         Options.ApplyArguments(StartupOptions.CombineArguments(configTokens, _options.Arguments), GameVersion);
@@ -273,20 +354,12 @@ public sealed class Wc1Game
     private void EnableHighResolutionText()
     {
         var glyphs = new GlyphImageSource(new GlyphImageCache());
-        foreach (var (fontIndex, font) in _options.ReplacementFonts)
-        {
-            try
-            {
-                glyphs.SetReplacement(fontIndex, TrueTypeFont.Load(font.Data.Span), font.Name);
-            }
-            catch (Exception e) when (e is InvalidDataException or NotSupportedException or IndexOutOfRangeException or ArgumentException)
-            {
-                (_options.Log ?? Console.Error.WriteLine)($"Replacement font for font {fontIndex} not used ({font.Name}): {e.Message}");
-            }
-        }
         Glyphs = glyphs;
+        SetModernFonts(_options.ModernFontsOverride ?? Preferences.ModernFonts);
         Display.EnableHighResolutionText(glyphs);
         Runtime.Frame.Text = Display.Text;
+        bool sharp = _options.SharpTextOverride ?? Preferences.SharpText;
+        SetSharpText(sharp);
         KeyHelp = new KeyHelpOverlay(glyphs.Cache) { Font = 1 };
         glyphs.AddFont(Graphics.Fonts!.Get(1));
         Runtime.Frame.KeyHelp = KeyHelp;
@@ -340,6 +413,22 @@ public sealed class Wc1Game
     {
         Settings.MusicVolume = Volumes.MusicVolume;
         Settings.SfxVolume = Volumes.SfxVolume;
+        Settings.KeyHelp = Preferences.KeyHelp;
         Settings.Save();
+        Preferences.MusicVolume = Volumes.MusicVolume / 2;
+        Preferences.SoundVolume = Volumes.SfxVolume / 2;
+        if (_options.Display is { } display)
+            Preferences.CaptureFrom(display);
+        if (_options.Configuration is not { } configuration)
+            return;
+        Preferences.Write(configuration);
+        try
+        {
+            configuration.Save();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            (_options.Log ?? Console.Error.WriteLine)($"Settings not saved to {configuration.Path}: {e.Message}");
+        }
     }
 }

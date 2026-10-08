@@ -12,17 +12,20 @@ var options = CommandLine.Parse(args);
 if (options is null)
     return 0;
 
-// --game, WC1_GAME_DIR, config.json (current or executable directory and their parents), the current directory.
-GameDirectory? directory;
+// config.json: the current or the executable's directory or one of their parents (ADR-013, ADR-015).
+GameConfiguration? configuration;
 try
 {
-    directory = GameDirectory.Locate(options.GameDirectory);
+    configuration = GameConfiguration.Find(Directory.GetCurrentDirectory(), AppContext.BaseDirectory);
 }
 catch (InvalidDataException e)
 {
     Console.Error.WriteLine($"config.json: {e.Message}");
     return 2;
 }
+
+// --game, WC1_GAME_DIR, config.json, the current directory.
+GameDirectory? directory = GameDirectory.Locate(options.GameDirectory, configuration);
 if (directory is null)
 {
     Console.Error.WriteLine("Game data not found. Put the path into config.json (see config.example.json), " +
@@ -30,6 +33,15 @@ if (directory is null)
     return 2;
 }
 Console.WriteLine($"Game data: {directory.DataPath} ({(directory.IsDosData ? "DOS" : "Kilrathi Saga")})");
+
+// Without a config.json the settings are saved next to the executable, together with the game path.
+configuration ??= GameConfiguration.CreateAt(Path.Combine(AppContext.BaseDirectory, GameConfiguration.FileName));
+if (configuration.GameDirectory is null)
+    configuration.SetString(null, "gameDirectory", directory.RootPath);
+
+// The saved display settings, unless the command line sets them.
+var preferences = UserSettings.Read(configuration);
+options.ApplyDefaults(preferences);
 
 try
 {
@@ -45,14 +57,17 @@ try
     }
     else
     {
-        bool highResolutionText = !options.ClassicText && renderer is VulkanRenderer { SupportsText: true };
         var game = new Wc1Game(runtime, directory, new Wc1GameOptions
         {
             Arguments = options.GameArguments,
             Audio = !options.NoAudio,
             SkipIntro = options.SkipIntro,
-            HighResolutionText = highResolutionText,
-            ReplacementFonts = options.OriginalFonts ? new Dictionary<int, ReplacementFont>() : BundledFonts.Load(),
+            HighResolutionText = renderer is VulkanRenderer { SupportsText: true },
+            ReplacementFonts = BundledFonts.Load(),
+            SharpTextOverride = options.ClassicText ? false : null,
+            ModernFontsOverride = options.OriginalFonts ? false : null,
+            Configuration = configuration,
+            Display = new DisplayControl(host, renderer),
         });
         bool literal = options.KsLiteral;
         game.FlightLayer = new FlightLayer(game, new FlightOptions
@@ -103,6 +118,11 @@ namespace WingCommander
         public bool HostCheck { get; private set; }
         public bool ClassicSpace { get; private set; }
         public bool ClassicText { get; private set; }
+        private bool _fullscreenGiven;
+        private bool _filterGiven;
+        private bool _aspectGiven;
+        private bool _integerGiven;
+        private bool _vsyncGiven;
         public bool OriginalFonts { get; private set; }
         public bool KsLiteral { get; private set; }
         public RendererChoice Renderer { get; private set; }
@@ -115,6 +135,21 @@ namespace WingCommander
 #endif
         public List<string> GameArguments { get; } = [];
         public RendererSettings RendererSettings { get; } = new();
+
+        /// <summary>Takes the saved display settings for everything the command line did not set.</summary>
+        public void ApplyDefaults(UserSettings settings)
+        {
+            if (!_fullscreenGiven)
+                Fullscreen = settings.Fullscreen;
+            if (!_filterGiven)
+                RendererSettings.Filter = settings.Filter;
+            if (!_aspectGiven)
+                RendererSettings.Aspect = settings.Aspect;
+            if (!_integerGiven)
+                RendererSettings.IntegerScaling = settings.IntegerScaling;
+            if (!_vsyncGiven)
+                RendererSettings.VSync = settings.VSync;
+        }
 
         public static CommandLine? Parse(string[] args)
         {
@@ -134,23 +169,27 @@ namespace WingCommander
                         break;
                     case "--fullscreen":
                         o.Fullscreen = true;
+                        o._fullscreenGiven = true;
+                        break;
+                    case "--window":
+                        o.Fullscreen = false;
+                        o._fullscreenGiven = true;
                         break;
                     case "--filter" when i + 1 < args.Length:
-                        o.RendererSettings.Filter = args[++i].ToLowerInvariant() switch
-                        {
-                            "nearest" => ScalingFilter.Nearest,
-                            "linear" => ScalingFilter.Linear,
-                            _ => ScalingFilter.SharpBilinear,
-                        };
+                        o.RendererSettings.Filter = UserSettings.ParseFilter(args[++i]) ?? ScalingFilter.SharpBilinear;
+                        o._filterGiven = true;
                         break;
                     case "--square-pixels":
                         o.RendererSettings.Aspect = AspectMode.SquarePixels;
+                        o._aspectGiven = true;
                         break;
                     case "--integer":
                         o.RendererSettings.IntegerScaling = true;
+                        o._integerGiven = true;
                         break;
                     case "--no-vsync":
                         o.RendererSettings.VSync = false;
+                        o._vsyncGiven = true;
                         break;
                     case "--no-audio":
                         o.NoAudio = true;
@@ -197,7 +236,7 @@ namespace WingCommander
                         Console.WriteLine("""
                             wc1 - Wing Commander (.NET port)
 
-                            usage: wc1 [--game <dir>] [--scale N] [--fullscreen] [--filter nearest|sharp|linear]
+                            usage: wc1 [--game <dir>] [--scale N] [--fullscreen|--window] [--filter nearest|sharp|linear]
                                        [--square-pixels] [--integer] [--no-vsync] [--frames N]
                                        [--renderer auto|vulkan|sdl] [--vulkan-validation]
                                        [--no-audio] [--skip-intro] [--classic-space] [--classic-text] [--original-fonts]

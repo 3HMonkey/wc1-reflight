@@ -164,6 +164,8 @@ public sealed unsafe class SdlHost : IHostServices, IDisposable
 
     public bool IsMinimized => (SDL_GetWindowFlags(_window) & SDL_WindowFlags.SDL_WINDOW_MINIMIZED) != 0;
 
+    public bool IsFullscreen => (SDL_GetWindowFlags(_window) & SDL_WindowFlags.SDL_WINDOW_FULLSCREEN) != 0;
+
     public void SetWindowSize(int width, int height)
     {
         SDL_SetWindowSize(_window, width, height);

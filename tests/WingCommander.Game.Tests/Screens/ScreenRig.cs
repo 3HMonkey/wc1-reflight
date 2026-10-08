@@ -11,7 +11,7 @@ namespace WingCommander.Game.Tests.Screens;
 /// <summary>A headless game over the GOG data with a private user data directory.</summary>
 internal sealed class ScreenRig
 {
-    public ScreenRig(bool audio = false, bool copySaves = true, bool highResolutionText = false)
+    public ScreenRig(bool audio = false, bool copySaves = true, bool highResolutionText = false, Wc1GameOptions? options = null)
     {
         Host = new HeadlessServices
         {
@@ -24,7 +24,7 @@ internal sealed class ScreenRig
             SaveGameFile.CreateEmpty(Path.Combine(Host.UserDataDirectory, SaveGameFile.FileName));
         }
         Runtime = new GameRuntime(Host, new CRandom(1));
-        Game = new Wc1Game(Runtime, GameData.Require(), new Wc1GameOptions { Audio = audio, HighResolutionText = highResolutionText });
+        Game = new Wc1Game(Runtime, GameData.Require(), options ?? new Wc1GameOptions { Audio = audio, HighResolutionText = highResolutionText });
     }
 
     public HeadlessServices Host { get; }

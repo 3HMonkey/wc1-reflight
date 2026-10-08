@@ -17,6 +17,7 @@ renderer, sharp ships and text at any screen resolution, and the original music 
 | Ships in space | Pixel sprites scaled inside 320x200 | Ships, missiles, explosions and asteroids are drawn at your screen resolution (smooth scaling and rotation, far sharper ship models); the cockpit and HUD stay pixel-exact on top |
 | Text | Four pixel fonts | All text drawn at screen resolution: crisp vectorized originals or modern replacement fonts (see [Fonts](#fonts)); text drawn into off-screen buffers (space view, scenes, saved backgrounds) is followed too |
 | Help | Printed manual | **F10** shows the flight controls next to the cockpit (in the side margins of widescreen displays, otherwise as a panel) |
+| Menus | None | **Esc** opens a pause menu (in flight, in the rooms and on the title) with **settings**: volumes, fullscreen, filter, aspect ratio, vsync, sharp text, fonts, key help; saved in `config.json` |
 | Sound | AdLib / Sound Blaster | The original Origin FX music and sound effects on an emulated OPL2 (port of ymfm) |
 | Saves | Next to the game | In your user data folder; existing DOS saves are imported automatically |
 | Controls | DOS keyboard repeat | Key repeat identical on every system, Alt+X quits anywhere, Esc pauses during flight |
@@ -42,7 +43,7 @@ variable. Useful options:
 
 | Option | Effect |
 | --- | --- |
-| `--fullscreen`, `--scale N` | Fullscreen, or a window N times 320x240 |
+| `--fullscreen`, `--window`, `--scale N` | Fullscreen or window (overrides the setting); window size N times 320x240 |
 | `--filter nearest\|sharp\|linear`, `--square-pixels`, `--integer`, `--no-vsync` | Picture options |
 | `--renderer auto\|vulkan\|sdl` | Renderer (default: Vulkan with SDL fallback) |
 | `--classic-space` | Draw space objects into the 320x200 picture like the original |
@@ -51,7 +52,9 @@ variable. Useful options:
 | `--skip-intro`, `--no-audio` | Start faster, play silently |
 | `-- <switches>` | The original game's command-line switches |
 
-In flight, all original controls apply; **F10** toggles the key help, **Alt+X** quits.
+In flight, all original controls apply; **Esc** opens the pause menu with the settings, **F10**
+toggles the key help, **Alt+X** quits. The settings are saved in `config.json`; command-line
+options override them for one run.
 
 ### Native executable
 
@@ -105,7 +108,7 @@ code and the porting notes.
 
 ## Roadmap
 
-- Pause menu on Esc with settings (volumes, key bindings, display), stored in `config.json`
+- Key bindings in the settings menu (`controls` section of `config.json`)
 - Joystick and gamepad support
 - 3D ship models (glTF, PBR) and ray-traced effects on capable GPUs
 

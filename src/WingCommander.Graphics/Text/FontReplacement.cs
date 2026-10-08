@@ -157,6 +157,7 @@ public sealed class GlyphImageSource
     private readonly (TrueTypeFont Outline, string Name)?[] _outlines = new (TrueTypeFont, string)?[FontCache.FontCount];
     private readonly FontReplacement?[] _replacements = new FontReplacement?[FontCache.FontCount];
     private readonly BitmapFont?[] _replacementFonts = new BitmapFont?[FontCache.FontCount];
+    private readonly BitmapFont?[] _knownFonts = new BitmapFont?[FontCache.FontCount];
 
     public GlyphImageSource(GlyphImageCache cache)
     {
@@ -166,7 +167,11 @@ public sealed class GlyphImageSource
 
     public GlyphImageCache Cache { get; }
 
-    /// <summary>Replaces font <paramref name="fontIndex"/> by a TrueType font (null = original pixels again).</summary>
+    /// <summary>
+    /// Replaces font <paramref name="fontIndex"/> by a TrueType font (null = original pixels again).
+    /// Glyphs of the font that are already cached are rebuilt at once, so text on screen switches
+    /// with the next frame (the cache generation changes and renderers re-upload).
+    /// </summary>
     public void SetReplacement(int fontIndex, TrueTypeFont? outline, string name = "")
     {
         if ((uint)fontIndex >= FontCache.FontCount)
@@ -174,8 +179,18 @@ public sealed class GlyphImageSource
         _outlines[fontIndex] = outline is null ? null : (outline, name);
         _replacements[fontIndex] = null;
         _replacementFonts[fontIndex] = null;
-        Cache.Clear();
+        if (_knownFonts[fontIndex] is not { } font)
+            return;
+        for (int c = 0; c < 256; c++)
+        {
+            var key = new GlyphKey((byte)fontIndex, (byte)c);
+            if (Cache.Contains(key))
+                Cache.Set(key, GetReplacement(font)?.Build((byte)c) ?? GlyphImageBuilder.Build(font, (byte)c));
+        }
     }
+
+    /// <summary>True when font <paramref name="fontIndex"/> currently has a replacement.</summary>
+    public bool HasReplacement(int fontIndex) => (uint)fontIndex < FontCache.FontCount && _outlines[fontIndex] is not null;
 
     /// <summary>The replacement fitted to <paramref name="font"/>, or null.</summary>
     public FontReplacement? GetReplacement(BitmapFont font)
@@ -198,6 +213,8 @@ public sealed class GlyphImageSource
         if (font.Index < 0)
             throw new ArgumentException("The font has no FONTS.FNT index.", nameof(font));
         var key = new GlyphKey((byte)font.Index, character);
+        if ((uint)font.Index < FontCache.FontCount)
+            _knownFonts[font.Index] = font;
         if (!Cache.TryGet(key, out GlyphImage? image))
         {
             image = GetReplacement(font)?.Build(character) ?? GlyphImageBuilder.Build(font, character);

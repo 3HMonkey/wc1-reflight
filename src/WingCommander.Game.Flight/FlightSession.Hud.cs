@@ -268,6 +268,19 @@ internal sealed partial class FlightSession
         Game.Timing.SetFrameTimerPeriod(1);
     }
 
+    /// <summary>
+    /// Esc (port, ADR-015): the pause menu over the cockpit; the flight stands still while it is
+    /// open. Afterwards the frame timer restarts like after the original pause and steering goes
+    /// back to the keyboard (the pointer moved in the menu).
+    /// </summary>
+    private async ValueTask<PauseMenuChoice> ShowPauseMenuAsync(PauseMenuContext context)
+    {
+        PauseMenuChoice choice = await Game.ShowPauseMenuAsync(context);
+        Game.Timing.SetFrameTimerPeriod(1);
+        InitPlayerInput();
+        return choice;
+    }
+
     /// <remarks>C: ShowVersionBanner (0x4290D0, hudmsg.c).</remarks>
     private ValueTask ShowVersionBannerAsync() =>
         ShowOnScreenMessageAsync(true, 9999, $"WING COMMANDER VER. {Wc1Game.GameVersion}");
