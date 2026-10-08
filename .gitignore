@@ -24,3 +24,6 @@ gamedata/
 
 # Local configuration (path to the game data); see config.example.json
 config.json
+
+# Exported game data (backgrounds for editing etc.): never committed
+exports/
