@@ -131,6 +131,32 @@ public sealed class TextTests(OffscreenRendererFixture fixture) : VulkanTestBase
         Assert.Equal(drawn + 10, renderer.Statistics.GlyphsDrawn); // 11 instances, the space has no foreground
     }
 
+    [VulkanTheory]
+    [InlineData(960, 600, AspectMode.SquarePixels)]
+    [InlineData(1600, 1200, AspectMode.FourByThree)]
+    public void ScaledGlyphs_MatchTheCpuReference(int width, int height, AspectMode aspect)
+    {
+        // Text the game copied smaller or larger (the briefing board): fractional cells and scales.
+        var renderer = Fixture.Get(width, height, ScalingFilter.Nearest, aspect);
+        var scene = new TextScene();
+        GlyphKey a = scene.Set('A', TextScene.LetterA);
+        GlyphKey g = scene.Set('g', TextScene.LetterG);
+        float x = 30.4f;
+        foreach (GlyphKey key in new[] { a, g, a, g })
+        {
+            scene.Text.Add(new GlyphInstance(x, 50.3f, key, 90, 154f / 260, 88f / 156));
+            x += 5 * 154f / 260;
+        }
+        scene.Text.Add(new GlyphInstance(120.5f, 80.25f, a, 91, 1.5f, 1.25f));
+        scene.Text.Add(new GlyphInstance(200f, 120f, g, 92, 0.5f, 0.5f));
+        scene.AllowAllCells();
+        scene.Publish();
+        CapturedImage image = Render(renderer, scene.Frame);
+
+        var rect = PresentationLayout.Compute(width, height, aspect, false);
+        AssertMatchesReference(scene, image, rect, minimumTextPixels: 300);
+    }
+
     [VulkanFact]
     public void Mask_DecidesWhichInstancesMayDrawWhere_InPainterOrder()
     {

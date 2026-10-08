@@ -77,7 +77,8 @@ internal sealed partial class FlightSession
         events.PointerMovedByKeyboard = true;
         _previousSystemKey = events.SystemKeyDown;
         bool frameReady = true;
-        Game.ShowKeyHelp(FlightKeyHelp.Title, FlightKeyHelp.For(sim.TrainSimActive, Options.EscapePausesFlight));
+        ShowFlightKeyHelp();
+        events.KeyTranslationActive = true;
 
         try
         {
@@ -105,11 +106,17 @@ internal sealed partial class FlightSession
         }
         finally
         {
+            events.KeyTranslationActive = false;
             Game.HideKeyHelp();
             ExitSpaceFlight(savedCursorViewport);
         }
         return sim.ArcadeState;
     }
+
+    /// <summary>The key help of this flight with the player's keys (port addition, ADR-013, ADR-016).</summary>
+    private void ShowFlightKeyHelp() =>
+        Game.ShowKeyHelp(FlightKeyHelp.Title,
+            FlightKeyHelp.For(Sim.TrainSimActive, Options.EscapePausesFlight, Game.Preferences.Controls));
 
     /// <summary>The flight's present (DIBslam + DIBslamReal: present, then the 50 ms throttle).</summary>
     private async Task PresentSpaceFrameAsync()

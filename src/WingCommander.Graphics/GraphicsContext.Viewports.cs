@@ -1,5 +1,6 @@
 using WingCommander.Graphics.Cockpit;
 using WingCommander.Graphics.Raster;
+using WingCommander.Graphics.Text;
 
 namespace WingCommander.Graphics;
 
@@ -37,6 +38,36 @@ public sealed partial class GraphicsContext
         RasterClip destinationClip = ClipViewportToScreen(destination);
         RasterPrimitives.BlitRasterClip(sourceClip, source.Left, source.Top, destinationClip,
             destination.Left, destination.Top, TextTracker);
+    }
+
+    /// <summary>
+    /// Port addition: copies the source viewport's rectangle, stretched (nearest neighbour), over
+    /// the rectangle (<paramref name="x"/>, <paramref name="y"/>, <paramref name="width"/> x
+    /// <paramref name="height"/>) of the destination, clipped to the destination viewport. Text in
+    /// the source keeps being followed at its new size (output-resolution text). With
+    /// <paramref name="keepThinLines"/> a shrinking copy keeps lines and dots of a dark picture:
+    /// pixels that are not text take the brightest source pixel they cover (live palette).
+    /// </summary>
+    public void CopyViewportContentsScaled(Viewport source, Viewport destination, int x, int y, int width, int height,
+        bool keepThinLines = false)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(destination);
+        RasterClip sourceClip = ClipViewportToScreen(source);
+        RasterClip destinationClip = ClipViewportToScreen(destination);
+        if (!keepThinLines)
+        {
+            RasterPrimitives.BlitRasterClipScaled(sourceClip, destinationClip, x, y, width, height, TextTracker);
+            return;
+        }
+        Span<byte> rank = stackalloc byte[256];
+        ReadOnlySpan<byte> rgb = Palette.Live.Rgb;
+        for (int i = 0; i < 256; i++)
+            rank[i] = (byte)((rgb[i * 3] * 299 + rgb[i * 3 + 1] * 587 + rgb[i * 3 + 2] * 114) / 1000);
+        IndexedSurface sourceSurface = sourceClip.Surface;
+        TextLayerTracker? tracker = TextTracker;
+        Func<int, bool>? exact = tracker is { Enabled: true } ? index => tracker.IsFollowed(sourceSurface, index) : null;
+        RasterPrimitives.BlitRasterClipScaled(sourceClip, destinationClip, x, y, width, height, tracker, rank, exact);
     }
 
     /// <summary>Sets one clipped pixel (absolute coordinates).</summary>

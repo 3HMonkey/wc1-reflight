@@ -2,6 +2,7 @@ using WingCommander.Core.Platform;
 using WingCommander.Core.Rendering;
 using WingCommander.Core.Resources;
 using WingCommander.Game.Config;
+using WingCommander.Game.Input;
 using WingCommander.Game.Screens.Ui;
 using WingCommander.Graphics.Palettes;
 using WingCommander.Tests;
@@ -124,6 +125,49 @@ public sealed class PauseMenuTests
     }
 
     [DataFact]
+    public void FlightKeys_RebindAKey_AndSaveConfigJson()
+    {
+        string file = Path.Combine(Path.GetTempPath(), "wc1-controls-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var configuration = GameConfiguration.CreateAt(file);
+            var rig = new ScreenRig(options: new Wc1GameOptions { Audio = false, Configuration = configuration });
+            var (_, choice) = Open(PauseMenuContext.Menu, rig);
+            rig.Key(300, Down);   // Settings
+            rig.Key(500, Enter);
+            rig.Key(700, Up);     // wraps to Back
+            rig.Key(900, Up);     // Flight keys
+            rig.Key(1100, Enter);
+            for (int i = 0; i < 14; i++)
+                rig.Key(1300 + i * 150, Down); // Steer up .. Fire guns (headings are skipped)
+            rig.Key(3500, Enter);  // wait for the new key
+            rig.Key(3800, 0x21, 'F');
+            rig.Key(4100, Down);  // Fire missile
+            rig.Key(4300, Enter);
+            rig.Key(4600, 0x0f, 0x09); // Tab: the afterburner's key, swapped
+            rig.Key(4900, Esc);   // settings (saves when left)
+            rig.Key(5200, Esc);   // pause menu
+            rig.Key(5500, Esc);   // resume
+            rig.Runtime.RunHeadless(6500);
+            Assert.Equal(PauseMenuChoice.Resume, choice());
+            var controls = rig.Game.Preferences.Controls;
+            Assert.Equal(0x21, controls[FlightAction.FireGuns]);
+            Assert.Equal(0x0f, controls[FlightAction.FireMissile]);
+            Assert.Equal(0x1c, controls[FlightAction.Afterburner]);
+            Assert.NotNull(rig.Game.Events.KeyTranslation);
+            var saved = GameConfiguration.Load(file);
+            Assert.True(saved.TryGetString("controls", "fireGuns", out string guns));
+            Assert.Equal("F", guns);
+            Assert.True(saved.TryGetString("controls", "afterburner", out string afterburner));
+            Assert.Equal("Enter", afterburner);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [DataFact]
     public void QuitGame_AsksFirst_ThenEndsTheGame()
     {
         var (rig, _) = Open(PauseMenuContext.Menu);
@@ -202,5 +246,8 @@ public sealed class PauseMenuTests
         Assert.Equal(UserSettings.MaxVolume, settings.MusicVolume);
         Assert.Equal(ScalingFilter.SharpBilinear, settings.Filter);
         Assert.True(settings.SharpText && settings.ModernFonts && settings.KeyHelp);
+        Assert.True(settings.Controls.IsDefault); // the example lists every control with its original key
+        foreach (var info in KeyBindings.Actions)
+            Assert.True(configuration.TryGetString("controls", info.Id, out _), info.Id);
     }
 }

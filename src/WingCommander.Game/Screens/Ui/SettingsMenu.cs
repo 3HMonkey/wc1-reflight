@@ -7,7 +7,8 @@ namespace WingCommander.Game.Screens.Ui;
 
 /// <summary>
 /// The settings of the pause menu (ADR-015): music and sound volume, fullscreen, picture filter,
-/// aspect ratio, vertical sync, sharp text, fonts and the key help. Every change applies at once;
+/// aspect ratio, vertical sync, sharp text, fonts, the key help and the flight keys (a page of its
+/// own, <see cref="ControlsMenu"/>, ADR-016). Every change applies at once;
 /// leaving the screen saves the settings (config.json and wc1.cfg). Rows the current run cannot
 /// change (no window, no text renderer) are left out. Arrows select and change, Enter/Space
 /// changes, Esc or "Back" leaves; the mouse selects rows, clicks change them and set the volume
@@ -33,6 +34,7 @@ internal static class SettingsMenu
         SharpText,
         Fonts,
         KeyHelp,
+        Controls,
         Back,
     }
 
@@ -45,7 +47,7 @@ internal static class SettingsMenu
             rows.Add(Row.SharpText);
         if (game.SupportsModernFonts)
             rows.Add(Row.Fonts);
-        rows.AddRange([Row.KeyHelp, Row.Back]);
+        rows.AddRange([Row.KeyHelp, Row.Controls, Row.Back]);
 
         int selected = 0;
         int bottom = Top + 24 + rows.Count * RowHeight + 4;
@@ -69,7 +71,9 @@ internal static class SettingsMenu
                         selected = pointed;
                         if (rows[pointed] == Row.Back)
                             return;
-                        if (rows[pointed] is Row.Music or Row.Sound && e.X >= ValueX - 4)
+                        if (rows[pointed] == Row.Controls)
+                            await ControlsMenu.RunAsync(game, session);
+                        else if (rows[pointed] is Row.Music or Row.Sound && e.X >= ValueX - 4)
                             SetVolume(game, rows[pointed], Math.Clamp((e.X - ValueX) / BarSegment + 1, 0, UserSettings.MaxVolume));
                         else
                             Change(game, rows[pointed], +1);
@@ -92,7 +96,10 @@ internal static class SettingsMenu
                             case 0x1c or 0x39: // Enter, Space
                                 if (rows[selected] == Row.Back)
                                     return;
-                                Change(game, rows[selected], +1);
+                                if (rows[selected] == Row.Controls)
+                                    await ControlsMenu.RunAsync(game, session);
+                                else
+                                    Change(game, rows[selected], +1);
                                 break;
                             case 0x01: // Esc
                                 return;
@@ -203,6 +210,7 @@ internal static class SettingsMenu
         Row.VSync => "Vertical sync",
         Row.SharpText => "Sharp text",
         Row.Fonts => "Fonts",
+        Row.Controls => "Flight keys",
         _ => "Key help (F10)",
     };
 
@@ -220,6 +228,7 @@ internal static class SettingsMenu
         Row.SharpText => OnOff(game.Preferences.SharpText),
         Row.Fonts => game.Preferences.ModernFonts ? "Modern" : "Original",
         Row.KeyHelp => OnOff(game.Preferences.KeyHelp),
+        Row.Controls => game.Preferences.Controls.IsDefault ? "Original" : "Custom",
         _ => "",
     };
 

@@ -1,76 +1,23 @@
 using WingCommander.Core.Rendering;
+using WingCommander.Game.Input;
+using static WingCommander.Game.Input.FlightAction;
 
 namespace WingCommander.Game.Flight;
 
 /// <summary>
 /// The key reference shown during flight (ADR-013, port addition): the controls of
 /// <c>HandleSpaceFlightControls</c>, <c>process_player_input</c> and <c>player_input</c> as the
-/// port implements them (docs/analysis/flight-ui.md §2). Labels are kept short so the reference
-/// fits the side margins of a 16:9 window at a readable size. The training simulator skips the
-/// first key table (views, comm, autopilot, eject, wingman orders, video, message speed, nav map).
-/// Esc opens the pause menu (ADR-015) unless the original behaviour is kept (--ks-literal).
+/// port implements them (docs/analysis/flight-ui.md §2), with the player's keys (ADR-016). Labels
+/// are kept short so the reference fits the side margins of a 16:9 window at a readable size.
+/// The training simulator skips the first key table (views, comm, autopilot, eject, wingman
+/// orders, video, message speed, nav map). Esc opens the pause menu (ADR-015) unless the original
+/// behaviour is kept (--ks-literal).
 /// </summary>
 public static class FlightKeyHelp
 {
     public const string Title = "CONTROLS (F10)";
 
-    private static readonly KeyHelpSection Steering = new("FLIGHT",
-    [
-        new("Arrows", "Steer"),
-        new("Shift", "Steer hard"),
-        new("Ins Del", "Roll"),
-        new("Num 5", "Centre"),
-        new("+ -", "Throttle"),
-        new("\\", "Full speed"),
-        new("Bksp", "Stop"),
-        new("Tab", "Afterburner"),
-    ]);
-
-    private static readonly KeyHelpSection Navigation = new("NAVIGATION",
-    [
-        new("A", "Autopilot"),
-        new("N", "Nav, map"),
-    ]);
-
-    private static readonly KeyHelpSection Weapons = new("WEAPONS",
-    [
-        new("Space", "Guns"),
-        new("Enter", "Missile"),
-        new("G", "Select gun"),
-        new("W", "Select missile"),
-        new("L", "Lock target"),
-        new("T", "Target, next"),
-    ]);
-
-    private static readonly KeyHelpSection Displays = new("DISPLAYS",
-    [
-        new("D", "Damage"),
-        new("C", "Comm, 1-9"),
-        new("V", "Video on/off"),
-        new("M", "Message speed"),
-    ]);
-
-    private static readonly KeyHelpSection TrainingDisplays = new("DISPLAYS",
-    [
-        new("D", "Damage"),
-    ]);
-
-    private static readonly KeyHelpSection Wingman = new("WINGMAN",
-    [
-        new("H", "Form up"),
-        new("B", "Break, attack"),
-    ]);
-
-    private static readonly KeyHelpSection Views = new("VIEWS",
-    [
-        new("F1", "Cockpit"),
-        new("F2 F3 F4", "Left right rear"),
-        new("F5", "Chase"),
-        new("F6", "Battle"),
-        new("F7", "Target"),
-        new("F8", "Missile cam"),
-        new("F9", "Next ship"),
-    ]);
+    private static readonly KeyBindings Defaults = new();
 
     private static readonly KeyHelpSection Mouse = new("MOUSE",
     [
@@ -80,68 +27,112 @@ public static class FlightKeyHelp
         new("Right+move", "Roll, throttle"),
     ]);
 
-    private static readonly KeyHelpSection Game = new("GAME",
-    [
-        new("Esc", "Menu"),
-        new("P", "Pause"),
-        new("Ctrl+E", "Eject"),
-        new("Ctrl+S", "Sound"),
-        new("Ctrl+M", "Music"),
-        new("Alt+X", "Quit"),
-        new("F10", "Hide help"),
-    ]);
-
-    private static readonly KeyHelpSection LiteralGame = new("GAME",
-    [
-        new("P", "Pause"),
-        new("Ctrl+E", "Eject"),
-        new("Ctrl+S", "Sound"),
-        new("Ctrl+M", "Music"),
-        new("Alt+X", "Quit"),
-        new("F10", "Hide help"),
-    ]);
-
-    private static readonly KeyHelpSection TrainingGame = new("SIMULATOR",
-    [
-        new("Esc", "Menu, end"),
-        new("P", "Pause"),
-        new("Ctrl+S", "Sound"),
-        new("Ctrl+M", "Music"),
-        new("F10", "Hide help"),
-    ]);
-
-    private static readonly KeyHelpSection LiteralTrainingGame = new("SIMULATOR",
-    [
-        new("P", "Pause"),
-        new("Esc", "End"),
-        new("Ctrl+S", "Sound"),
-        new("Ctrl+M", "Music"),
-        new("F10", "Hide help"),
-    ]);
-
-    /// <summary>Campaign flight.</summary>
-    public static IReadOnlyList<KeyHelpSection> Campaign { get; } =
-        [Steering, Navigation, Weapons, Displays, Wingman, Views, Mouse, Game];
+    /// <summary>Campaign flight with the default keys.</summary>
+    public static IReadOnlyList<KeyHelpSection> Campaign { get; } = For(false, true);
 
     /// <summary>Campaign flight with the original Esc (no pause menu).</summary>
-    public static IReadOnlyList<KeyHelpSection> CampaignLiteral { get; } =
-        [Steering, Navigation, Weapons, Displays, Wingman, Views, Mouse, LiteralGame];
+    public static IReadOnlyList<KeyHelpSection> CampaignLiteral { get; } = For(false, false);
 
-    /// <summary>The training simulator.</summary>
-    public static IReadOnlyList<KeyHelpSection> TrainingSimulator { get; } =
-        [Steering, Weapons, TrainingDisplays, Mouse, TrainingGame];
+    /// <summary>The training simulator with the default keys.</summary>
+    public static IReadOnlyList<KeyHelpSection> TrainingSimulator { get; } = For(true, true);
 
     /// <summary>The training simulator with the original Esc (ends the simulation at once).</summary>
-    public static IReadOnlyList<KeyHelpSection> TrainingSimulatorLiteral { get; } =
-        [Steering, Weapons, TrainingDisplays, Mouse, LiteralTrainingGame];
+    public static IReadOnlyList<KeyHelpSection> TrainingSimulatorLiteral { get; } = For(true, false);
 
-    /// <summary>The reference for a flight in the campaign or the simulator, with or without the pause menu on Esc.</summary>
-    public static IReadOnlyList<KeyHelpSection> For(bool trainingSimulator, bool escapeOpensMenu) =>
-        (trainingSimulator, escapeOpensMenu) switch
+    /// <summary>
+    /// The reference for a flight in the campaign or the simulator, with or without the pause menu
+    /// on Esc, showing the keys of <paramref name="bindings"/> (default keys when null).
+    /// </summary>
+    public static IReadOnlyList<KeyHelpSection> For(bool trainingSimulator, bool escapeOpensMenu, KeyBindings? bindings = null)
+    {
+        bindings ??= Defaults;
+        string Key(FlightAction action) => GameKeys.Name(bindings[action]);
+        string Keys(params FlightAction[] actions) => string.Join(' ', actions.Select(Key));
+        bool Default(params FlightAction[] actions) => actions.All(a => bindings[a] == KeyBindings.Info(a).DefaultKey);
+
+        var steering = new KeyHelpSection("FLIGHT",
+        [
+            new(Default(SteerUp, SteerDown, SteerLeft, SteerRight) ? "Arrows" : Keys(SteerUp, SteerDown, SteerLeft, SteerRight), "Steer"),
+            new("Shift", "Steer hard"),
+            new(Keys(RollLeft, RollRight), "Roll"),
+            new(Key(CentreStick), "Centre"),
+            new(Default(ThrottleUp, ThrottleDown) ? "+ -" : Keys(ThrottleUp, ThrottleDown), "Throttle"),
+            new(Key(FullSpeed), "Full speed"),
+            new(Key(Stop), "Stop"),
+            new(Key(Afterburner), "Afterburner"),
+        ]);
+        var weapons = new KeyHelpSection("WEAPONS",
+        [
+            new(Key(FireGuns), "Guns"),
+            new(Key(FireMissile), "Missile"),
+            new(Key(SelectGun), "Select gun"),
+            new(Key(SelectMissile), "Select missile"),
+            new(Key(LockTarget), "Lock target"),
+            new(Key(NextTarget), "Target, next"),
+        ]);
+
+        if (trainingSimulator)
         {
-            (true, true) => TrainingSimulator,
-            (true, false) => TrainingSimulatorLiteral,
-            (false, true) => Campaign,
-            (false, false) => CampaignLiteral,
-        };
+            var displays = new KeyHelpSection("DISPLAYS", [new(Key(DamageDisplay), "Damage")]);
+            var simulator = new KeyHelpSection("SIMULATOR", escapeOpensMenu
+                ?
+                [
+                    new("Esc", "Menu, end"),
+                    new(Key(Pause), "Pause"),
+                    new("Ctrl+S", "Sound"),
+                    new("Ctrl+M", "Music"),
+                    new("F10", "Hide help"),
+                ]
+                :
+                [
+                    new(Key(Pause), "Pause"),
+                    new("Esc", "End"),
+                    new("Ctrl+S", "Sound"),
+                    new("Ctrl+M", "Music"),
+                    new("F10", "Hide help"),
+                ]);
+            return [steering, weapons, displays, Mouse, simulator];
+        }
+
+        var navigation = new KeyHelpSection("NAVIGATION",
+        [
+            new(Key(Autopilot), "Autopilot"),
+            new(Key(NavMap), "Nav, map"),
+        ]);
+        var campaignDisplays = new KeyHelpSection("DISPLAYS",
+        [
+            new(Key(DamageDisplay), "Damage"),
+            new(Key(Communication), "Comm, 1-9"),
+            new(Key(FlightAction.Video), "Video on/off"),
+            new(Key(MessageSpeed), "Message speed"),
+        ]);
+        var wingman = new KeyHelpSection("WINGMAN",
+        [
+            new(Key(FormUp), "Form up"),
+            new(Key(BreakAndAttack), "Break, attack"),
+        ]);
+        var views = new KeyHelpSection("VIEWS",
+        [
+            new(Key(CockpitView), "Cockpit"),
+            new(Keys(LeftView, RightView, RearView), "Left right rear"),
+            new(Key(ChaseView), "Chase"),
+            new(Key(BattleView), "Battle"),
+            new(Key(TargetView), "Target"),
+            new(Key(MissileCamera), "Missile cam"),
+            new(Key(NextShipView), "Next ship"),
+        ]);
+        List<KeyHelpEntry> game = [];
+        if (escapeOpensMenu)
+            game.Add(new("Esc", "Menu"));
+        game.AddRange(
+        [
+            new(Key(Pause), "Pause"),
+            new("Ctrl+E", "Eject"),
+            new("Ctrl+S", "Sound"),
+            new("Ctrl+M", "Music"),
+            new("Alt+X", "Quit"),
+            new("F10", "Hide help"),
+        ]);
+        return [steering, navigation, weapons, campaignDisplays, wingman, views, Mouse, new KeyHelpSection("GAME", game)];
+    }
 }

@@ -63,36 +63,38 @@ public static class ReferenceCompositor
     {
         float scaleX = rect.Width / (float)Framebuffer.Width;
         float scaleY = rect.Height / (float)Framebuffer.Height;
-        float texelsPerPixel = TexelsPerPixel(scaleX, scaleY);
         ReadOnlySpan<GlyphInstance> instances = text.Instances;
         for (int i = 0; i < instances.Length; i++)
         {
             GlyphInstance instance = instances[i];
             if (!text.Glyphs.TryGet(instance.Glyph, out GlyphImage? image) || !image.HasForeground)
                 continue;
+            float cellWidth = image.Width * instance.ScaleX, cellHeight = image.Height * instance.ScaleY;
+            float texelsPerPixel = TexelsPerPixel(scaleX * instance.ScaleX, scaleY * instance.ScaleY);
             int x0 = Math.Max(rect.X, (int)MathF.Floor(rect.X + instance.X * scaleX));
-            int x1 = Math.Min(rect.X + rect.Width, (int)MathF.Ceiling(rect.X + (instance.X + image.Width) * scaleX));
+            int x1 = Math.Min(rect.X + rect.Width, (int)MathF.Ceiling(rect.X + (instance.X + cellWidth) * scaleX));
             int y0 = Math.Max(rect.Y, (int)MathF.Floor(rect.Y + instance.Y * scaleY));
-            int y1 = Math.Min(rect.Y + rect.Height, (int)MathF.Ceiling(rect.Y + (instance.Y + image.Height) * scaleY));
+            int y1 = Math.Min(rect.Y + rect.Height, (int)MathF.Ceiling(rect.Y + (instance.Y + cellHeight) * scaleY));
             for (int y = y0; y < y1; y++)
             {
                 float ly = (y + 0.5f - rect.Y) / scaleY;
                 int cy = (int)ly;
-                if ((uint)cy >= Framebuffer.Height || ly < instance.Y || ly >= instance.Y + image.Height)
+                if ((uint)cy >= Framebuffer.Height || ly < instance.Y || ly >= instance.Y + cellHeight)
                     continue;
                 for (int x = x0; x < x1; x++)
                 {
                     float lx = (x + 0.5f - rect.X) / scaleX;
                     int cx = (int)lx;
-                    if ((uint)cx >= Framebuffer.Width || lx < instance.X || lx >= instance.X + image.Width)
+                    if ((uint)cx >= Framebuffer.Width || lx < instance.X || lx >= instance.X + cellWidth)
                         continue;
                     int mask = text.Mask[cy * Framebuffer.Width + cx];
                     if (mask == 0 || i < mask - 1)
                         continue;
-                    float coverage = GlyphRasterizer.Coverage(image, lx - instance.X, ly - instance.Y, texelsPerPixel);
+                    float cellX = (lx - instance.X) / instance.ScaleX, cellY = (ly - instance.Y) / instance.ScaleY;
+                    float coverage = GlyphRasterizer.Coverage(image, cellX, cellY, texelsPerPixel);
                     if (coverage <= 0f)
                         continue;
-                    Vector3 colour = GlyphRasterizer.SampleColour(image, lx - instance.X, ly - instance.Y, instance.Colour, palette);
+                    Vector3 colour = GlyphRasterizer.SampleColour(image, cellX, cellY, instance.Colour, palette);
                     Blend(rgba, (y * width + x) * 4, colour, coverage);
                 }
             }

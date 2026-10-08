@@ -3,11 +3,13 @@ using WingCommander.Core.Video;
 namespace WingCommander.Core.Rendering;
 
 /// <summary>
-/// One glyph of the game's text that a renderer draws at output resolution: the top-left pixel
-/// of the glyph cell on the 320x200 screen, the glyph, and the palette index that replaces the
-/// glyph's ink (<see cref="GlyphImage.InkIndex"/>).
+/// One glyph of the game's text that a renderer draws at output resolution: the top-left corner
+/// of the glyph cell on the 320x200 screen, the glyph, the palette index that replaces the
+/// glyph's ink (<see cref="GlyphImage.InkIndex"/>) and the cell's scale (1 for text drawn
+/// directly; text the game copied smaller or larger, like the briefing board, has other scales
+/// and fractional positions).
 /// </summary>
-public readonly record struct GlyphInstance(short X, short Y, GlyphKey Glyph, byte Colour);
+public readonly record struct GlyphInstance(float X, float Y, GlyphKey Glyph, byte Colour, float ScaleX = 1f, float ScaleY = 1f);
 
 /// <summary>
 /// The game's font text for renderers that draw it at output resolution (ADR-013), published by
@@ -20,7 +22,8 @@ public readonly record struct GlyphInstance(short X, short Y, GlyphKey Glyph, by
 /// <remarks>
 /// <para>Renderer contract: while <see cref="RenderFrame.Text"/> is set, show <see cref="Pixels"/>
 /// instead of <see cref="ClassicLayer.Pixels"/> (same live palette), then draw the instances in
-/// list order (painter order: later = on top) as quads covering their glyph cell. Instance
+/// list order (painter order: later = on top) as quads covering their glyph cell (width and
+/// height times the instance's scale). Instance
 /// <c>i</c> may colour pixel <c>p</c> only when <c>Mask[p] != 0 &amp;&amp; i &gt;= Mask[p] - 1</c>.
 /// Colours are palette indices looked up in the live palette, so fades apply.</para>
 /// <para>Renderers without text support ignore the layer and show the classic pixels.</para>

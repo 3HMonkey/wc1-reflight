@@ -147,6 +147,9 @@ public sealed class Wc1Game
     /// <summary>True when the renderer draws text at output resolution (the "sharp text" setting applies).</summary>
     public bool SupportsSharpText => Display.TextTracker is not null;
 
+    /// <summary>True while text is drawn at output resolution (supported and switched on).</summary>
+    public bool SharpTextActive => Display.TextTracker is { Enabled: true };
+
     /// <summary>True when replacement fonts are available (the "fonts" setting applies).</summary>
     public bool SupportsModernFonts => SupportsSharpText && _options.ReplacementFonts.Count > 0;
 
@@ -192,6 +195,23 @@ public sealed class Wc1Game
     {
         _keyHelpActive = false;
         UpdateKeyHelpVisibility();
+    }
+
+    /// <summary>
+    /// Takes over the key bindings of <see cref="Preferences"/> (ADR-016): the flight reads the
+    /// bound keys from now on; the default bindings leave every key untouched.
+    /// </summary>
+    public void ApplyControls() =>
+        Events.KeyTranslation = Preferences.Controls.IsDefault ? null : new KeyTranslation(Preferences.Controls);
+
+    /// <summary>
+    /// The host loop's hook between presents: the cursor is shown where the mouse is now (port
+    /// addition), so it moves smoothly although the game presents 16 or 20 frames per second.
+    /// </summary>
+    private void RefreshPointer()
+    {
+        if (Events.TryGetHostPointer(out int x, out int y))
+            Display.RefreshCursor(x, y);
     }
 
     /// <summary>F10: the player's choice whether the key help is shown (saved with the settings).</summary>
@@ -321,6 +341,7 @@ public sealed class Wc1Game
         if (_options.Display is { } display)
             defaults.CaptureFrom(display);
         Preferences = UserSettings.Read(_options.Configuration, defaults);
+        ApplyControls();
         Volumes.MusicVolume = Preferences.MusicVolume * 2;
         Volumes.SfxVolume = Preferences.SoundVolume * 2;
         var configTokens = StartupOptions.ReadConfigTokens(Directory);
@@ -338,6 +359,7 @@ public sealed class Wc1Game
             IntroMusic = Audio;
         }
         InitializeEventManager();
+        Runtime.AfterUpdate = RefreshPointer;
         Timing.SetFrameTimerPeriod(0x78);
         Graphics.LoadGamePaletteFile(Directory.ReadFile(GamePaletteFile.FileName));
         Graphics.Fonts = FontCache.FromGameDirectory(Directory);

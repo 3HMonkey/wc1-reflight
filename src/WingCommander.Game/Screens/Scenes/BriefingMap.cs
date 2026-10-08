@@ -14,7 +14,8 @@ namespace WingCommander.Game.Screens.Scenes;
 /// objective). The map fits all objectives and the player into 150x135 pixels and draws hazard
 /// fields, objective markers by type and labels placed so they avoid each other. The picture is
 /// copied to the screen at row 4, and the screen viewport keeps that top edge afterwards, as in
-/// the original.
+/// the original. Reflight also draws the picture, shrunk, onto the wall screen of the briefing
+/// room (<see cref="DrawOnBoard"/>).
 /// </summary>
 /// <remarks>
 /// C (nav.c): BriefingMap_DisplayMap (0x40E210), BriefingMap_LoadShapes (0x40E190),
@@ -70,6 +71,7 @@ public sealed class BriefingMap
     private readonly Area[] _reserved = new Area[ReservedAreaCapacity];
     private readonly TextContext _labelText = new() { TextBuffer = new byte[256] };
     private readonly TextContext _readoutText = new() { TextBuffer = new byte[256] };
+    private Viewport? _target;
     private MissionBriefingData _mission = null!;
     private ShapeTable? _mapShape;
     private int _labelCount;
@@ -101,7 +103,39 @@ public sealed class BriefingMap
 
     private GraphicsContext Gfx => _stage.Graphics;
 
-    private Viewport Scene => _stage.SceneBuffer;
+    /// <summary>The picture being drawn: the stage's scene buffer, or the board's own buffer.</summary>
+    private Viewport Scene => _target ?? _stage.SceneBuffer;
+
+    /// <summary>
+    /// Port addition (Reflight): draws the map of <paramref name="mission"/> into a buffer of its
+    /// own and copies it, shrunk to <paramref name="width"/> x <paramref name="height"/>, to
+    /// (<paramref name="x"/>, <paramref name="y"/>) of <paramref name="destination"/>. The copy
+    /// keeps the map's thin lines, and the output-resolution text follows the readout and the
+    /// labels to their new size, so they stay readable. Leaves the current text context alone.
+    /// </summary>
+    public void DrawOnBoard(MissionBriefingData mission, Viewport destination, int x, int y, int width, int height)
+    {
+        ArgumentNullException.ThrowIfNull(mission);
+        ArgumentNullException.ThrowIfNull(destination);
+        _mission = mission;
+        TextContext? savedText = Gfx.CurrentTextContext;
+        var picture = Viewport.Allocate(0, 0, 259, 155, PaletteColours.Black);
+        _target = picture;
+        try
+        {
+            _mapShape = _stage.Game.Resources.GetShape(LogicalFile.CockpitVga, 2);
+            DrawReadout(Title);
+            BuildMap();
+            Gfx.CopyViewportContentsScaled(picture, destination, x, y, width, height, keepThinLines: true);
+        }
+        finally
+        {
+            _target = null;
+            _mapShape = null;
+            Gfx.TextTracker?.Forget(picture.Surface!);
+            Gfx.SetTextContext(savedText);
+        }
+    }
 
     /// <summary>
     /// Draws the map of <paramref name="mission"/> (current objective highlighted) into a temporary
@@ -137,6 +171,16 @@ public sealed class BriefingMap
     /// <remarks>C: DrawNavLocationReadout (0x40DF70, nav.c) with showFlightData = 0.</remarks>
     private async Task DrawNavLocationReadoutAsync(string title)
     {
+        DrawReadout(title);
+        BuildMap();
+        Gfx.CopyViewportContents(Scene, _stage.Screen);
+        await _stage.PresentAsync();
+    }
+
+    /// <summary>The readout column: title, sector, system, mission name and type, the note on the current objective.</summary>
+    /// <remarks>C: the text part of DrawNavLocationReadout (0x40DF70, nav.c).</remarks>
+    private void DrawReadout(string title)
+    {
         Gfx.ClearViewport(Scene, PaletteColours.Black);
         SetScreenClipRect(155, 2, 259, 155);
         _readoutText.Viewport = Scene;
@@ -155,9 +199,6 @@ public sealed class BriefingMap
         DrawNavTextLine(TextContext.AlignCentre, DefaultTextColour, "* %s *\n"u8, missionTypeName);
         DrawNavTextLine(TextContext.AlignCentre, DefaultTextColour, "\nNotes\n"u8);
         DrawNavTextLine(0, DefaultTextColour, "%s\n"u8, _mission.NavNote(_mission.CurrentObjective));
-        BuildMap();
-        Gfx.CopyViewportContents(Scene, _stage.Screen);
-        await _stage.PresentAsync();
     }
 
     /// <summary>Formats one readout line into the context's buffer and draws it at the cursor.</summary>

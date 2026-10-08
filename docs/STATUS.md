@@ -3,6 +3,27 @@
 Newest entry first. Each entry: date, what was done, what was learned, what is next.
 Subsystem details live in `progress/*.md`; this file is the project journal.
 
+## 2026-10-08 — Session 3 (late): flight keys, briefing board, smooth cursor
+
+### Done
+- ADR-016: flight key bindings. Settings > Flight keys (`ControlsMenu`): 36 controls, scrolling
+  list, capture with swap, Del = original key, reset; `controls` section in `config.json`
+  (`KeyBindings`, `GameKeys`); `KeyTranslation` in `EventManager.Dispatch` while the flight
+  reads its controls; the key help shows the bound keys.
+- ADR-017: the briefing board shows this mission's nav map with sharp text. Scaled copies
+  (`ScaledCopy`, `BlitRasterClipScaled` keeping thin lines), scaled glyph instances in the
+  tracker, the Vulkan text pass and the CPU reference; hollow cells for glyphs the shrinking
+  skips; the mask stores the lowest walked index.
+- ADR-018: the cursor follows the mouse between presents (host loop hook).
+- Text tracker: buffers that are dropped (menu backgrounds, temporary pictures) release their
+  glyphs (`Forget`, collected tracks); before, every pause menu kept about 1 MB alive.
+- Tests: Core 61, Graphics 180, Audio 240, Simulation 418, Render.Vulkan 102, Game 272,
+  Game.Flight 239 (1,512) — all green.
+
+### Next
+- Background graphics for wide screens (export for outpainting, then 16:9 / 16:10 backdrops).
+- Joystick/gamepad layer and its bindings; playtesting; R2b interpolation, R3 meshes, R4 ray tracing.
+
 ## 2026-10-08 — Session 3 (later): pause menu, settings, README screenshots
 
 ### Done

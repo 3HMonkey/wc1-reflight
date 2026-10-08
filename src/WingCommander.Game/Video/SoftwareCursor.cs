@@ -63,6 +63,10 @@ public sealed class SoftwareCursor : ISoftwareCursor
     public bool IsOnScreen =>
         _events.CursorShowCount != 0 && _viewport is not null && Shape is not null && _graphics.IsScreenSurface(_viewport);
 
+    public short X => _events.Cursor.X;
+
+    public short Y => _events.Cursor.Y;
+
     /// <summary>Selects the cursor sprite and frame.</summary>
     /// <remarks>C: SetMouseCursorShape (0x4360F0). Its background restore is guarded by
     /// pDrawnMouseCursorShape, which nothing ever sets, so only the state change is ported.</remarks>
@@ -84,14 +88,14 @@ public sealed class SoftwareCursor : ISoftwareCursor
         _compositor.DrawCursor(viewport, _events.Cursor.X, _events.Cursor.Y, shape, _events.Cursor.Frame);
     }
 
-    public void DrawInto(IndexedSurface surface)
+    public void DrawInto(IndexedSurface surface, int x, int y)
     {
         ArgumentNullException.ThrowIfNull(surface);
         if (Shape is not { } shape || _viewport is not { } viewport)
             return;
         Viewport target = viewport.Clone();
         target.Surface = surface;
-        _graphics.DrawSpriteDefault(target, _events.Cursor.X, _events.Cursor.Y, shape, _events.Cursor.Frame);
+        _graphics.DrawSpriteDefault(target, x, y, shape, _events.Cursor.Frame);
     }
 
     public void Restore()

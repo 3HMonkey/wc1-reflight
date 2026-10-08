@@ -278,6 +278,7 @@ internal sealed partial class FlightSession
         PauseMenuChoice choice = await Game.ShowPauseMenuAsync(context);
         Game.Timing.SetFrameTimerPeriod(1);
         InitPlayerInput();
+        ShowFlightKeyHelp(); // the keys may have changed in the settings
         return choice;
     }
 

@@ -89,7 +89,14 @@ public sealed class GameRuntime : IGameApp
         if (elapsed > MaxStep)
             elapsed = MaxStep;
         Scheduler.Advance(elapsed.TotalMilliseconds);
+        AfterUpdate?.Invoke();
     }
+
+    /// <summary>
+    /// Called by the host loop after every update, while the game waits (port addition: the
+    /// cursor follows the mouse between presents). Headless runs never call it.
+    /// </summary>
+    public Action? AfterUpdate { get; set; }
 
     /// <summary>Runs until the game finishes or <paramref name="limitMilliseconds"/> of virtual time passed (tests, tools).</summary>
     public bool RunHeadless(double limitMilliseconds)

@@ -13,12 +13,17 @@ public interface ISoftwareCursor
     /// <summary>True when the cursor is visible and its viewport is the screen.</summary>
     bool IsOnScreen { get; }
 
+    /// <summary>The position the game draws the cursor at.</summary>
+    short X { get; }
+
+    short Y { get; }
+
     void CaptureAndDraw();
 
     void Restore();
 
-    /// <summary>Draws the cursor as presented into <paramref name="surface"/> (a 320x200 scratch copy of the screen).</summary>
-    void DrawInto(IndexedSurface surface);
+    /// <summary>Draws the cursor at (<paramref name="x"/>, <paramref name="y"/>) into <paramref name="surface"/> (a 320x200 scratch copy of the screen).</summary>
+    void DrawInto(IndexedSurface surface, int x, int y);
 }
 
 /// <summary>
@@ -174,6 +179,58 @@ public sealed class Display
     public Task ClearViewportAsync(Viewport viewport, byte colour) =>
         Graphics.ClearViewport(viewport, colour) ? SlamRealAsync() : Task.CompletedTask;
 
+    /// <summary>
+    /// Port addition, called by the host loop between presents: shows the last presented frame
+    /// again with the cursor at (<paramref name="x"/>, <paramref name="y"/>), the pointer's live
+    /// position. The original redrew the cursor on every mouse message (RefreshMouseCursorDisplay);
+    /// this way the cursor follows the mouse at the display's rate instead of the game's 16 or 20
+    /// frames per second. Nothing else changes: the game keeps drawing into the working frame.
+    /// </summary>
+    public void RefreshCursor(int x, int y)
+    {
+        if (!_hasPresented || Cursor is not { IsOnScreen: true } cursor || (x == _cursorX && y == _cursorY))
+            return;
+        _cursorX = x;
+        _cursorY = y;
+        _refreshed ??= new Framebuffer();
+        _refreshedSurface ??= IndexedSurface.FromFramebuffer(_refreshed);
+        _presented.Pixels.CopyTo(_refreshed.Pixels, 0);
+        cursor.DrawInto(_refreshedSurface, x, y);
+        Front.Present(_refreshed);
+        if (Text is not null && _presentedTextPixels is not null && _presentedTextMask is not null)
+        {
+            _presentedTextPixels.CopyTo(Text.Pixels.Pixels, 0);
+            _presentedTextMask.CopyTo(Text.Mask, 0);
+            KeepCursorOnTop(cursor, x, y);
+            Text.Publish();
+        }
+    }
+
+    private readonly Framebuffer _presented = new();
+    private Framebuffer? _refreshed;
+    private IndexedSurface? _refreshedSurface;
+    private byte[]? _presentedTextPixels;
+    private ushort[]? _presentedTextMask;
+    private bool _hasPresented;
+    private int _cursorX = int.MinValue;
+    private int _cursorY = int.MinValue;
+
+    /// <summary>Keeps the frame being presented (and its text layer) without the cursor, for <see cref="RefreshCursor"/>.</summary>
+    private void RememberPresented(ISoftwareCursor? drawnCursor)
+    {
+        Working.Pixels.CopyTo(_presented.Pixels, 0);
+        if (Text is not null)
+        {
+            _presentedTextPixels ??= new byte[Framebuffer.PixelCount];
+            _presentedTextMask ??= new ushort[Framebuffer.PixelCount];
+            Text.Pixels.Pixels.CopyTo(_presentedTextPixels, 0);
+            Text.Mask.CopyTo(_presentedTextMask, 0);
+        }
+        _hasPresented = true;
+        _cursorX = drawnCursor?.X ?? int.MinValue;
+        _cursorY = drawnCursor?.Y ?? int.MinValue;
+    }
+
     /// <summary>Shows the working frame immediately, without the throttle; the slam flag is left alone.</summary>
     /// <remarks>C: DIBupdate and RefreshMouseCursorDisplay (partial updates present the whole
     /// frame, as in the SDL port).</remarks>
@@ -188,6 +245,7 @@ public sealed class Display
     {
         if (TextTracker is not null)
             TextTracker.Publish(Working.Pixels, Text!);
+        RememberPresented(null);
         Front.Present(Working);
         Presented?.Invoke();
     }
@@ -202,6 +260,7 @@ public sealed class Display
         bool drawCursor = cursor is { IsOnScreen: true };
         if (TextTracker is not null)
             TextTracker.Publish(Working.Pixels, Text!);
+        RememberPresented(drawCursor ? cursor : null);
         if (drawCursor)
             cursor!.CaptureAndDraw();
         Front.Present(Working);
@@ -209,7 +268,7 @@ public sealed class Display
         {
             cursor!.Restore();
             if (Text is not null)
-                KeepCursorOnTop(cursor);
+                KeepCursorOnTop(cursor, cursor.X, cursor.Y);
         }
         Presented?.Invoke();
     }
@@ -221,7 +280,7 @@ public sealed class Display
     /// layer's frame and no glyph may draw over them. The cursor is drawn twice into a scratch
     /// screen (cleared to 0x00 and to 0xFF) so every pixel it sets is found, whatever its colour.
     /// </summary>
-    private void KeepCursorOnTop(ISoftwareCursor cursor)
+    private void KeepCursorOnTop(ISoftwareCursor cursor, int x, int y)
     {
         _cursorScratch ??= new IndexedSurface(Framebuffer.Width, Framebuffer.Height);
         byte[] scratch = _cursorScratch.Pixels;
@@ -232,7 +291,7 @@ public sealed class Display
         {
             byte fill = pass == 0 ? (byte)0x00 : (byte)0xFF;
             Array.Fill(scratch, fill);
-            cursor.DrawInto(_cursorScratch);
+            cursor.DrawInto(_cursorScratch, x, y);
             for (int p = 0; p < scratch.Length; p++)
             {
                 if (scratch[p] == fill)

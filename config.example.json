@@ -15,5 +15,24 @@
     "vsync": true
   },
   "text": { "sharp": true, "modernFonts": true },             // text at screen resolution, replacement fonts
-  "interface": { "keyHelp": true }                            // flight key help (F10)
+  "interface": { "keyHelp": true },                           // flight key help (F10)
+
+  // Flight keys (pause menu: Settings > Flight keys). Key names: A..Z, 0, F1..F12, F10 excepted,
+  // Up, Down, Left, Right, Insert, Delete, Home, End, PageUp, PageDown, Num5, NumPlus, NumMinus,
+  // NumMultiply, Space, Enter, Tab, Backspace, Minus, Equals, Backslash, Comma, Period, Slash,
+  // Semicolon, Apostrophe, Grave, LeftBracket, RightBracket. Esc, 1-9, Shift, Ctrl and Alt are
+  // reserved. A key named twice ends up on the later control.
+  "controls": {
+    "steerUp": "Up", "steerDown": "Down", "steerLeft": "Left", "steerRight": "Right",
+    "rollLeft": "Insert", "rollRight": "Delete", "centreStick": "Num5",
+    "throttleUp": "Equals", "throttleDown": "Minus", "fullSpeed": "Backslash", "stop": "Backspace",
+    "afterburner": "Tab", "autopilot": "A", "navMap": "N",
+    "fireGuns": "Space", "fireMissile": "Enter", "selectGun": "G", "selectMissile": "W",
+    "lockTarget": "L", "nextTarget": "T",
+    "damageDisplay": "D", "communication": "C", "video": "V", "messageSpeed": "M",
+    "formUp": "H", "breakAndAttack": "B",
+    "cockpitView": "F1", "leftView": "F2", "rightView": "F3", "rearView": "F4", "chaseView": "F5",
+    "battleView": "F6", "targetView": "F7", "missileCamera": "F8", "nextShipView": "F9",
+    "pause": "P"
+  }
 }

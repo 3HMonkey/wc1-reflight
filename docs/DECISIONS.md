@@ -159,6 +159,41 @@ Accepted 2026-10-07 (open questions of `analysis/flight-ui.md` §8.2).
   cinematic is UI; every missing presentation effect (warp flash, phase-3 cockpit messages) is
   an `ISimulationEvents` member.
 
+## ADR-018: The cursor follows the mouse between presents
+Accepted 2026-10-08 (user report: the menu cursor lagged). The game presents 16 frames per
+second (20 in flight) and drew the software cursor only then; the original Windows build redrew
+it on every mouse message (`RefreshMouseCursorDisplay`). After every host update
+(`GameRuntime.AfterUpdate`) the display now shows the last presented frame again with the
+cursor at the pointer's live position (`EventManager.TryGetHostPointer`, clamped to the cursor
+bounds; `Display.RefreshCursor`). The game's state, its event queue and its own presents are
+unchanged, so headless runs and recorded input behave exactly as before.
+
+## ADR-017: The briefing board shows the mission's map
+Accepted 2026-10-08 (user request: the text on the mission board). The wall screen behind the
+Colonel is fixed art (BRIEFING.VGA frame 1): a shrunken map of the first mission whose text
+cannot be read. While text is drawn at output resolution, Reflight draws this mission's
+briefing nav map there instead (`BriefingMap.DrawOnBoard`): the 260x156 picture is rendered
+into a buffer of its own and shrunk to 154x88 at the art's place (its frame lands on the
+art's), with a copy that keeps thin lines and dots (`CopyViewportContentsScaled`,
+`keepThinLines`: text pixels exact, others the brightest pixel they cover). The text tracker
+follows scaled copies: glyph instances get fractional positions and a scale
+(`GlyphInstance.ScaleX/ScaleY`, drawn by the Vulkan text pass and the CPU reference), and a
+scaled glyph covers every pixel its cell touches, hollow where the copy sampled something else,
+so glyphs the shrinking skips ("i", full stops) are drawn too. The mask stores the lowest walked
+list index. With the classic text the art stays as it is.
+
+## ADR-016: Flight key bindings
+Accepted 2026-10-08. The pause menu's settings get a "Flight keys" page (`ControlsMenu`) with
+the 36 flight controls of the key help (`KeyBindings`, section `controls` of `config.json`, key
+names in `GameKeys`). One key per control; binding a key that another control has swaps the
+two. In flight (`EventManager.KeyTranslationActive`) a bound key is translated into the scan
+code and virtual-key code of the control's original key (`KeyTranslation`), so it behaves
+exactly like that key; the original keys of moved controls do nothing, untouched keys pass.
+The translation chosen at a key press holds until its release. Keys pressed with Ctrl or Alt are
+not translated (eject, sound, music, quit stay on their letters). Reserved: Esc (menu), 1-9
+(communication), F10 (key help), Shift, Ctrl, Alt, the lock keys. Menus suspend the
+translation. The key help shows the bound keys. Joystick and mouse buttons are not bindable yet.
+
 ## ADR-015: Pause menu and settings in config.json
 Accepted 2026-10-08 (user request: "a pause menu with settings on Esc").
 

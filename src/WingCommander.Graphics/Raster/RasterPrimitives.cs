@@ -69,6 +69,69 @@ public static class RasterPrimitives
         return 0;
     }
 
+    /// <summary>
+    /// Port addition: copies the whole source clip, stretched with nearest-neighbour sampling, over
+    /// the destination rectangle (<paramref name="destinationX"/>, <paramref name="destinationY"/>,
+    /// <paramref name="width"/> x <paramref name="height"/>, absolute coordinates); only the part
+    /// inside the destination clip is written. Copies within one surface read a snapshot.
+    /// With <paramref name="rank"/> (256 priorities by palette index) a shrinking copy keeps thin
+    /// lines and dots: every destination pixel takes the highest ranked source pixel it covers,
+    /// except where <paramref name="exact"/> says the sampled source pixel must be copied as it is
+    /// (followed text); such pixels are not taken by their neighbours either.
+    /// </summary>
+    public static int BlitRasterClipScaled(in RasterClip source, in RasterClip destination, int destinationX, int destinationY,
+        int width, int height, IRasterCopyObserver? observer = null, ReadOnlySpan<byte> rank = default, Func<int, bool>? exact = null)
+    {
+        if (source.IsEmpty || destination.IsEmpty)
+            return -2;
+        if (width <= 0 || height <= 0)
+            return -3;
+        IndexedSurface src = source.Surface, dst = destination.Surface;
+        var copy = new ScaledCopy(
+            source.Left - src.OriginX, source.Top - src.OriginY, source.Right - source.Left + 1, source.Bottom - source.Top + 1,
+            destinationX - dst.OriginX, destinationY - dst.OriginY, width, height,
+            Math.Max(destination.Left, destinationX) - dst.OriginX,
+            Math.Max(destination.Top, destinationY) - dst.OriginY,
+            Math.Min(destination.Right, destinationX + width - 1) - dst.OriginX,
+            Math.Min(destination.Bottom, destinationY + height - 1) - dst.OriginY);
+        if (copy.IsEmpty)
+            return -3;
+
+        byte[] from = ReferenceEquals(src, dst) ? (byte[])src.Pixels.Clone() : src.Pixels;
+        byte[] to = dst.Pixels;
+        for (int y = copy.ClipTop; y <= copy.ClipBottom; y++)
+        {
+            int sourceRow = copy.SourceY(y) * src.Width;
+            int destinationRow = y * dst.Width;
+            var (rowFirst, rowEnd) = copy.CoveredRows(y);
+            for (int x = copy.ClipLeft; x <= copy.ClipRight; x++)
+            {
+                int sampled = sourceRow + copy.SourceX(x);
+                if (rank.IsEmpty || (exact?.Invoke(sampled) ?? false))
+                {
+                    to[destinationRow + x] = from[sampled];
+                    continue;
+                }
+                var (columnFirst, columnEnd) = copy.CoveredColumns(x);
+                byte best = from[sampled];
+                for (int sy = Math.Max(rowFirst, 0); sy < rowEnd && sy < src.Height; sy++)
+                {
+                    for (int sx = Math.Max(columnFirst, 0); sx < columnEnd && sx < src.Width; sx++)
+                    {
+                        int index = sy * src.Width + sx;
+                        byte value = from[index];
+                        if (rank[value] > rank[best] && !(exact?.Invoke(index) ?? false))
+                            best = value;
+                    }
+                }
+                to[destinationRow + x] = best;
+            }
+        }
+        // After the pixels: glyphs the copy shrank away take the destination pixels as they are now.
+        observer?.OnScaledCopy(src, dst, in copy);
+        return 0;
+    }
+
     /// <summary>Sets one pixel; returns the previous value or -2/-3 when clipped.</summary>
     /// <remarks>C: SetRasterClipPixel (screens.c).</remarks>
     public static int SetRasterClipPixel(in RasterClip clip, int x, int y, byte colour)

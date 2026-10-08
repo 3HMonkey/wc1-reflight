@@ -279,8 +279,12 @@ public sealed class TextScene
     {
         foreach (GlyphInstance instance in Text.Instances)
         {
-            if (Glyphs.TryGet(instance.Glyph, out GlyphImage? image))
-                SetMask(new ScreenRect(instance.X, instance.Y, image.Width, image.Height), 1);
+            if (!Glyphs.TryGet(instance.Glyph, out GlyphImage? image))
+                continue;
+            int left = (int)MathF.Floor(instance.X), top = (int)MathF.Floor(instance.Y);
+            int right = (int)MathF.Ceiling(instance.X + image.Width * instance.ScaleX);
+            int bottom = (int)MathF.Ceiling(instance.Y + image.Height * instance.ScaleY);
+            SetMask(new ScreenRect(left, top, right - left, bottom - top), 1);
         }
     }
 
@@ -300,8 +304,8 @@ public static class TextReference
     public const double Epsilon = 0.02;
 
     /// <summary>Field texels per output pixel of game text in <paramref name="rect"/>: the mean of x and y.</summary>
-    public static float TexelsPerPixel(PresentationRect rect) =>
-        GlyphImage.FieldScale * 0.5f * (Framebuffer.Width / (float)rect.Width + Framebuffer.Height / (float)rect.Height);
+    public static float TexelsPerPixel(PresentationRect rect, float scaleX = 1f, float scaleY = 1f) =>
+        GlyphImage.FieldScale * 0.5f * (Framebuffer.Width / (rect.Width * scaleX) + Framebuffer.Height / (rect.Height * scaleY));
 
     /// <summary>The classic pass with nearest filtering: black outside the rectangle, null on a logical pixel edge.</summary>
     public static Vector3? Classic(Framebuffer pixels, Palette palette, PresentationRect rect, int px, int py)
@@ -326,7 +330,6 @@ public static class TextReference
 
         int cx = (int)Math.Floor(qx), cy = (int)Math.Floor(qy);
         ushort mask = text.Mask[cy * Framebuffer.Width + cx];
-        float texelsPerPixel = TexelsPerPixel(rect);
         double ex = Epsilon * Framebuffer.Width / rect.Width, ey = Epsilon * Framebuffer.Height / rect.Height;
         ReadOnlySpan<GlyphInstance> instances = text.Instances;
         for (int i = 0; i < instances.Length; i++)
@@ -336,11 +339,13 @@ public static class TextReference
             GlyphInstance instance = instances[i];
             if (!text.Glyphs.TryGet(instance.Glyph, out GlyphImage? image) || !image.HasForeground)
                 continue;
-            double cellX = qx - instance.X, cellY = qy - instance.Y;
-            if (cellX < -ex || cellY < -ey || cellX > image.Width + ex || cellY > image.Height + ey)
+            // Scaled instances (copied text) measure the cell and its edges in their own units.
+            double cellX = (qx - instance.X) / instance.ScaleX, cellY = (qy - instance.Y) / instance.ScaleY;
+            double sx = ex / instance.ScaleX, sy = ey / instance.ScaleY;
+            if (cellX < -sx || cellY < -sy || cellX > image.Width + sx || cellY > image.Height + sy)
                 continue;
-            bool nearEdge = cellX < ex || cellY < ey || cellX > image.Width - ex || cellY > image.Height - ey;
-            float coverage = GlyphRasterizer.Coverage(image, (float)cellX, (float)cellY, texelsPerPixel);
+            bool nearEdge = cellX < sx || cellY < sy || cellX > image.Width - sx || cellY > image.Height - sy;
+            float coverage = GlyphRasterizer.Coverage(image, (float)cellX, (float)cellY, TexelsPerPixel(rect, instance.ScaleX, instance.ScaleY));
             if (nearEdge)
             {
                 if (coverage > 0.002f)

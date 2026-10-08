@@ -92,6 +92,13 @@ public sealed partial class SceneDirector
     ];
 
     private BriefingMap? _briefingMap;
+    private BriefingMap? _boardMap;
+
+    /// <summary>The wall screen in backdrop frame 1 (art coordinates): inside of the grey frame.</summary>
+    private const int BoardLeft = 13, BoardTop = 11, BoardRight = 306, BoardBottom = 116;
+
+    /// <summary>Where the art's shrunken map picture lies: the 260x156 nav map at 154x88 puts its frame on the art's.</summary>
+    private const int BoardMapX = 85, BoardMapY = 23, BoardMapWidth = 154, BoardMapHeight = 88;
 
     /// <summary>The briefing's nav map (keeps the original's label tables between maps).</summary>
     public BriefingMap Map => _briefingMap ??= new BriefingMap(Stage);
@@ -306,11 +313,27 @@ public sealed partial class SceneDirector
         _briefingPortrait = null;
         _talkingHead = Shape(LogicalFile.BriefingVga, 2);
         Gfx.DrawSpriteDefault(Scene, -96, 0, _backdrop, 1);
+        DrawMissionOnBoard(-96);
         Gfx.DrawSpriteDefault(Scene, 224, 0, _backdrop, 2);
         Gfx.DrawSpriteDefault(Scene, 240, 127, _talkingHead, 0);
         Gfx.DrawSpriteDefault(Scene, 252, 127, _backdrop, 3);
         await Stage.RefreshAsync();
         _talkingHead = null;
+    }
+
+    /// <summary>
+    /// Reflight: the wall screen behind the Colonel shows the map of this mission instead of the
+    /// picture in the art (the same shrunken map of the first mission in every briefing, its text
+    /// unreadable), while text is drawn at output resolution: readout and labels are then sharp.
+    /// With the classic text the art stays as it is.
+    /// </summary>
+    /// <param name="boardX">Where backdrop frame 1 was drawn.</param>
+    private void DrawMissionOnBoard(int boardX)
+    {
+        if (!_game.SharpTextActive || Mission is not { } mission)
+            return;
+        Gfx.DrawFilledViewportRect(Scene, boardX + BoardLeft, BoardTop, boardX + BoardRight, BoardBottom, Black);
+        (_boardMap ??= new BriefingMap(Stage)).DrawOnBoard(mission, Scene, boardX + BoardMapX, BoardMapY, BoardMapWidth, BoardMapHeight);
     }
 
     /// <summary>

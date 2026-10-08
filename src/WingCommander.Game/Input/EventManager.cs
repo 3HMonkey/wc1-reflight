@@ -150,7 +150,37 @@ public sealed partial class EventManager
     }
 
     /// <summary>Delivers a host event stamped with the current virtual time.</summary>
-    public void EnqueueHostEvent(in HostInputEvent e) => EnqueueHostEvent(e, _timing.Scheduler.Now);
+    public void EnqueueHostEvent(in HostInputEvent e)
+    {
+        if (e.Kind is HostInputKind.MouseMove or HostInputKind.MouseButtonDown or HostInputKind.MouseButtonUp)
+        {
+            _hostPointerX = Math.Clamp(e.X, 0, 319);
+            _hostPointerY = Math.Clamp(e.Y, 0, 199);
+            _hostPointerKnown = true;
+        }
+        EnqueueHostEvent(e, _timing.Scheduler.Now);
+    }
+
+    private int _hostPointerX;
+    private int _hostPointerY;
+    private bool _hostPointerKnown;
+
+    /// <summary>
+    /// The pointer where the host last reported it, ahead of the events the game has read,
+    /// clamped to the cursor bounds like the events will be (port addition: the display shows
+    /// the cursor there between presents).
+    /// </summary>
+    public bool TryGetHostPointer(out int x, out int y)
+    {
+        x = _hostPointerX;
+        y = _hostPointerY;
+        if (!_hostPointerKnown)
+            return false;
+        var bounds = Cursor.Bounds;
+        x = Math.Clamp(x, bounds.Left, Math.Max(bounds.Left, (int)bounds.Right));
+        y = Math.Clamp(y, bounds.Top, Math.Max(bounds.Top, (int)bounds.Bottom));
+        return true;
+    }
 
     /// <summary>
     /// The only place host events enter the game: runs the device pump, services music, moves
@@ -201,6 +231,56 @@ public sealed partial class EventManager
 
     private readonly bool[] _consumedKeys = new bool[KeyStateSize];
 
+    /// <summary>
+    /// The player's key bindings (port addition, ADR-016), applied to every key press while
+    /// <see cref="KeyTranslationActive"/> is set (flight); null = the original keys.
+    /// </summary>
+    public KeyTranslation? KeyTranslation { get; set; }
+
+    /// <summary>Set by the flight while its controls are read; menus clear it so they get the plain keys.</summary>
+    public bool KeyTranslationActive { get; set; }
+
+    /// <summary>Per pressed key: what its press was translated to (0 = itself, -2 = nothing), used for its repeats and release.</summary>
+    private readonly short[] _heldKeys = new short[KeyStateSize];
+
+    /// <summary>
+    /// Applies the key bindings to a key event; false when the key does nothing. The translation is
+    /// chosen when the key goes down and kept until it goes up, so a key held while the flight
+    /// starts, ends or opens a menu still releases what it pressed. Keys pressed with Ctrl or Alt
+    /// are never translated (the fixed combinations such as Ctrl+E stay on their letters).
+    /// </summary>
+    private bool TranslateKey(ref HostInputEvent e)
+    {
+        int scanCode = e.Code;
+        if (scanCode <= 0 || scanCode >= KeyStateSize)
+            return true;
+        int target;
+        if (e.Kind == HostInputKind.KeyUp || e.Repeat)
+        {
+            target = _heldKeys[scanCode];
+            if (e.Kind == HostInputKind.KeyUp)
+                _heldKeys[scanCode] = 0;
+        }
+        else
+        {
+            target = 0;
+            bool modifier = (e.Modifiers & (HostModifiers.Control | HostModifiers.Alt)) != 0
+                || _physicalKeys[0x1d] > 0 || _physicalKeys[0x38] > 0;
+            if (KeyTranslationActive && KeyTranslation is { } translation && !modifier)
+            {
+                int translated = translation.Translate(scanCode);
+                target = translated == KeyTranslation.Blocked ? -2 : Math.Max(translated, 0);
+            }
+            _heldKeys[scanCode] = (short)target;
+        }
+        if (target == 0)
+            return true;
+        if (target < 0)
+            return false;
+        e = e with { Code = target, VirtualKey = GameKeys.VirtualKey(target) };
+        return true;
+    }
+
     private bool ConsumePortHotkey(in HostInputEvent e)
     {
         int scanCode = e.Code;
@@ -227,16 +307,21 @@ public sealed partial class EventManager
         {
             case HostInputKind.KeyDown:
             case HostInputKind.KeyUp:
+            {
                 if (ConsumePortHotkey(in e))
+                    break;
+                HostInputEvent key = e;
+                if (!TranslateKey(ref key))
                     break;
                 if (NormalizeKeyRepeat)
                 {
-                    if (e.Repeat)
+                    if (key.Repeat)
                         break; // replaced by the repeats generated on the virtual clock
-                    TrackKeyRepeat(in e, at);
+                    TrackKeyRepeat(in key, at);
                 }
-                HandleKey(in e);
+                HandleKey(in key);
                 break;
+            }
             case HostInputKind.MouseWheel:
             {
                 // player_input samples one transition before consuming the rest: release first.
@@ -252,6 +337,7 @@ public sealed partial class EventManager
                 break;
             case HostInputKind.FocusLost:
                 Array.Clear(_physicalKeys);
+                Array.Clear(_heldKeys);
                 _keyRepeatActive = false;
                 break;
         }

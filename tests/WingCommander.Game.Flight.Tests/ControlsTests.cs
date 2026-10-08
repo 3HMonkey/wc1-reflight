@@ -136,6 +136,36 @@ public class ControlsTests
         Assert.True(after > 0);
     }
 
+    [DataTheory]
+    [InlineData(0x21, 'F', true)]   // the guns' new key
+    [InlineData(0x39, ' ', false)]  // Space, their old key, does nothing now
+    public void Rebound_guns_fire_on_their_new_key_only(int scan, int virtualKey, bool fires)
+    {
+        int after = 0;
+        Fly(6, 20, [new(10, scan, virtualKey)], (_, session, count) =>
+        {
+            if (count == 12)
+                after = PlayerProjectiles(session);
+        }, setUp: r =>
+        {
+            r.Game.Preferences.Controls.Bind(Input.FlightAction.FireGuns, 0x21);
+            r.Game.ApplyControls();
+        });
+        Assert.Equal(fires, after > 0);
+    }
+
+    private static int PlayerProjectiles(FlightSession session)
+    {
+        int projectiles = 0;
+        for (int obj = 0; obj <= ObjectSlots.LastMoving; obj++)
+        {
+            ref readonly var o = ref session.Sim.Objects[obj];
+            if (o.Class == ObjectClass.Projectile && o.Owner == ObjectSlots.Player)
+                projectiles++;
+        }
+        return projectiles;
+    }
+
     [DataFact]
     public void Vdu_keys_select_the_pages()
     {

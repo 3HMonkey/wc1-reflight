@@ -14,6 +14,9 @@ public interface IRasterCopyObserver
     /// of <paramref name="destination"/> (linear runs; they may continue on the next row).
     /// </summary>
     void OnCopy(IndexedSurface source, int sourceIndex, IndexedSurface destination, int destinationIndex, int length);
+
+    /// <summary>A scaled copy (port addition) has stretched a rectangle of <paramref name="source"/> into <paramref name="destination"/> (called after the pixels were written).</summary>
+    void OnScaledCopy(IndexedSurface source, IndexedSurface destination, in ScaledCopy copy);
 }
 
 /// <summary>
@@ -33,17 +36,24 @@ public interface IRasterCopyObserver
 /// shows the classic frame. Because a stack is checked against the pixel before every push, a
 /// valid top implies valid layers below it. A copy replaces the destination stacks by the source
 /// stacks, with the glyphs moved by the copy offset.</para>
+/// <para>A scaled copy (the briefing board) gives the glyphs a new size. A scaled glyph covers
+/// every destination pixel its cell touches: where the pixel samples the glyph, the pixel maps to
+/// a cell of the glyph; where it samples something else (the edge of a shrunk cell, or the whole
+/// of an "i" or a full stop the sampling skipped) the glyph lies on top, hollow: it has no
+/// classic pixel there but may be drawn at output resolution.</para>
 /// <para>A glyph is drawn at output resolution only while <b>all</b> of its foreground pixels are
 /// still in valid stacks (text drawn over it does not count as a change): text that was erased or
 /// painted over, even partly, is shown by the classic frame, so no fragment of an old line survives
-/// where only its background pixels are left (cleared subtitles, redrawn panels).</para>
+/// where only its background pixels are left (cleared subtitles, redrawn panels). A scaled glyph
+/// left without foreground pixels needs all its pixels instead.</para>
 /// <para>Publishing walks each screen stack from the top: every drawable layer whose pixel lets the
-/// layers below show through (transparent pixels, foreground on a transparent background) continues
-/// the walk; the first layer that defines the pixel by itself (background, or foreground on an
-/// opaque background) ends it. Layers that are not drawable are skipped where they are transparent
-/// and end the walk where they wrote the pixel. The mask stores the list index of the deepest
-/// layer reached + 1, so the renderer draws exactly the glyphs of the walked layers there, in
-/// painter order.</para>
+/// layers below show through (transparent pixels, foreground on a transparent background, hollow
+/// pixels) continues the walk; the first layer that defines the pixel by itself (background, or
+/// foreground on an opaque background) ends it. Layers that are not drawable are skipped where
+/// they are transparent and end the walk where they wrote the pixel. The mask stores the lowest
+/// list index of the walked layers + 1 (normally the deepest layer's; copies list clones in the
+/// order they meet them), so the renderer draws the glyphs of the walked layers there, in painter
+/// order.</para>
 /// </remarks>
 public sealed class TextLayerTracker : IRasterCopyObserver
 {
@@ -52,10 +62,12 @@ public sealed class TextLayerTracker : IRasterCopyObserver
 
     private readonly SurfaceTrack _screen;
     private readonly ConditionalWeakTable<IndexedSurface, SurfaceTrack> _tracks = new();
+    private readonly List<SurfaceTrack> _trackList = [];
     private readonly List<GlyphRecord?> _records = [];
     private readonly Stack<int> _free = new();
     private readonly List<int> _order = [];
     private readonly Dictionary<(int Slot, int Dx, int Dy, SurfaceTrack Track), int> _clones = [];
+    private readonly Dictionary<int, int> _scaledClones = [];
     private int[] _runStacks = new int[320 * MaximumDepth];
     private byte[] _runDepths = new byte[320];
 
@@ -67,6 +79,7 @@ public sealed class TextLayerTracker : IRasterCopyObserver
             throw new ArgumentException("The tracker publishes the 320x200 screen surface.", nameof(screen));
         _screen = new SurfaceTrack(screen);
         _tracks.Add(screen, _screen);
+        _trackList.Add(_screen);
         Glyphs = glyphs;
     }
 
@@ -89,6 +102,24 @@ public sealed class TextLayerTracker : IRasterCopyObserver
         _order.Clear();
         _clones.Clear();
     }
+
+    /// <summary>
+    /// Forgets the glyphs of a buffer that is no longer used (a temporary picture); buffers that
+    /// are simply dropped are forgotten at the next <see cref="Publish"/> after they were collected.
+    /// </summary>
+    public void Forget(IndexedSurface surface)
+    {
+        ArgumentNullException.ThrowIfNull(surface);
+        if (!_tracks.TryGetValue(surface, out SurfaceTrack? track) || ReferenceEquals(track, _screen))
+            return;
+        ClearAll(track);
+        _tracks.Remove(surface);
+        _trackList.Remove(track);
+    }
+
+    /// <summary>True when buffer pixel <paramref name="index"/> of <paramref name="surface"/> belongs to a followed glyph.</summary>
+    public bool IsFollowed(IndexedSurface surface, int index) =>
+        Enabled && _tracks.TryGetValue(surface, out SurfaceTrack? track) && (uint)index < (uint)track.Depth.Length && track.Depth[index] != 0;
 
     /// <summary>
     /// A glyph is about to be drawn into <paramref name="surface"/> with its cell's top-left pixel
@@ -115,6 +146,8 @@ public sealed class TextLayerTracker : IRasterCopyObserver
         record.Track = track;
         record.X = (short)x;
         record.Y = (short)y;
+        record.OriginX = x;
+        record.OriginY = y;
         int slot = Allocate(record);
         byte[] pixels = surface.Pixels;
         for (int row = 0; row < height; row++)
@@ -199,6 +232,83 @@ public sealed class TextLayerTracker : IRasterCopyObserver
     }
 
     /// <summary>
+    /// The written destination pixels take the stacks of the source pixels they sample, with the
+    /// glyphs scaled: one clone per glyph the copy reaches, covering every destination pixel its
+    /// cell touches. Pixels where a clone is hollow (they sample something else) get it on top;
+    /// intact glyphs that no destination pixel samples become hollow clones.
+    /// </summary>
+    public void OnScaledCopy(IndexedSurface source, IndexedSurface destination, in ScaledCopy copy)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(destination);
+        if (!Enabled || copy.IsEmpty)
+            return;
+        _tracks.TryGetValue(source, out SurfaceTrack? from);
+        _tracks.TryGetValue(destination, out SurfaceTrack? to);
+        if (from is null && to is null)
+            return;
+        to ??= Track(destination);
+
+        // Copies within one surface read a snapshot of the source stacks.
+        int[]? stacks = null;
+        byte[]? depths = null;
+        if (from is not null && ReferenceEquals(from, to))
+        {
+            stacks = (int[])from.Stack.Clone();
+            depths = (byte[])from.Depth.Clone();
+        }
+
+        int recordsBefore = _order.Count;
+        _scaledClones.Clear();
+        for (int y = copy.ClipTop; y <= copy.ClipBottom; y++)
+        {
+            int sourceRow = copy.SourceY(y);
+            for (int x = copy.ClipLeft; x <= copy.ClipRight; x++)
+            {
+                int d = y * to.Width + x;
+                Clear(to, d);
+                if (from is null)
+                    continue;
+                int s = sourceRow * from.Width + copy.SourceX(x);
+                if (depths is null)
+                    Prune(from, s, source.Pixels[s]);
+                int depth = (depths ?? from.Depth)[s];
+                for (int level = 0; level < depth; level++)
+                {
+                    int slot = (stacks ?? from.Stack)[s * MaximumDepth + level];
+                    if (!_scaledClones.TryGetValue(slot, out int clone))
+                    {
+                        clone = ScaledClone(slot, to, in copy, destination.Pixels);
+                        _scaledClones[slot] = clone;
+                    }
+                    if (clone >= 0)
+                        Push(to, d, clone);
+                }
+            }
+        }
+
+        if (from is not null)
+        {
+            // Glyphs the sampling skipped entirely: hollow clones, when they are intact.
+            for (int i = 0; i < recordsBefore; i++)
+            {
+                int slot = _order[i];
+                GlyphRecord record = _records[slot]!;
+                if (!ReferenceEquals(record.Track, from) || _scaledClones.ContainsKey(slot))
+                    continue;
+                PruneFootprint(record, source.Pixels);
+                _scaledClones[slot] = record.Drawable ? ScaledClone(slot, to, in copy, destination.Pixels) : -1;
+            }
+            foreach (int clone in _scaledClones.Values)
+            {
+                if (clone >= 0)
+                    PushHollowCells(clone, to);
+            }
+        }
+        _scaledClones.Clear();
+    }
+
+    /// <summary>
     /// Fills <paramref name="layer"/> for the frame in <paramref name="working"/> (the screen as it
     /// is presented, without the cursor) and publishes it.
     /// </summary>
@@ -219,6 +329,7 @@ public sealed class TextLayerTracker : IRasterCopyObserver
             return;
         }
 
+        ReleaseCollectedTracks();
         foreach (var (surface, track) in _tracks)
         {
             byte[] pixels = ReferenceEquals(track, _screen) ? null! : surface.Pixels;
@@ -234,7 +345,7 @@ public sealed class TextLayerTracker : IRasterCopyObserver
         {
             GlyphRecord record = _records[slot]!;
             record.Index = ReferenceEquals(record.Track, _screen) && record.Drawable && layer.Count < ushort.MaxValue - 1
-                ? layer.Add(new GlyphInstance(record.X, record.Y, record.Key, record.Colour))
+                ? layer.Add(new GlyphInstance(record.OriginX, record.OriginY, record.Key, record.Colour, record.ScaleX, record.ScaleY))
                 : -1;
         }
 
@@ -243,7 +354,7 @@ public sealed class TextLayerTracker : IRasterCopyObserver
             int depth = _screen.Depth[p];
             if (depth == 0)
                 continue;
-            int deepest = -1;
+            int lowest = int.MaxValue;
             byte value = working[p];
             for (int level = depth - 1; level >= 0; level--)
             {
@@ -256,15 +367,15 @@ public sealed class TextLayerTracker : IRasterCopyObserver
                         break;
                     continue;
                 }
-                deepest = record.Index;
+                lowest = Math.Min(lowest, record.Index);
                 value = record.Back(cell, out bool covers);
                 if (covers)
                     break;
             }
-            if (deepest < 0)
+            if (lowest == int.MaxValue)
                 continue;
             output[p] = value;
-            mask[p] = (ushort)(deepest + 1);
+            mask[p] = (ushort)(lowest + 1);
         }
         layer.Publish();
     }
@@ -275,8 +386,31 @@ public sealed class TextLayerTracker : IRasterCopyObserver
         {
             track = new SurfaceTrack(surface);
             _tracks.Add(surface, track);
+            _trackList.Add(track);
         }
         return track;
+    }
+
+    /// <summary>Drops the glyphs of buffers the game no longer holds (their records would live on otherwise).</summary>
+    private void ReleaseCollectedTracks()
+    {
+        for (int i = _trackList.Count - 1; i >= 0; i--)
+        {
+            SurfaceTrack track = _trackList[i];
+            if (track.Surface.TryGetTarget(out _))
+                continue;
+            ClearAll(track);
+            _trackList.RemoveAt(i);
+        }
+    }
+
+    private void ClearAll(SurfaceTrack track)
+    {
+        for (int p = 0; p < track.Depth.Length; p++)
+        {
+            if (track.Depth[p] != 0)
+                Clear(track, p);
+        }
     }
 
     private static bool AnyStack(SurfaceTrack track, int start, int length)
@@ -315,6 +449,45 @@ public sealed class TextLayerTracker : IRasterCopyObserver
         _order.Add(clone);
         _clones[(slot, dx, dy, track)] = clone;
         return clone;
+    }
+
+    /// <summary>The scaled copy of a source glyph, or -1 when the copy touches none of its pixels.</summary>
+    private int ScaledClone(int slot, SurfaceTrack track, in ScaledCopy copy, byte[] destinationPixels)
+    {
+        if (_records[slot]!.ScaledTo(track, in copy, destinationPixels) is not { } scaled)
+            return -1;
+        int clone = Allocate(scaled);
+        _order.Add(clone);
+        return clone;
+    }
+
+    /// <summary>Puts a scaled glyph on top of the pixels where it is hollow.</summary>
+    private void PushHollowCells(int slot, SurfaceTrack track)
+    {
+        GlyphRecord record = _records[slot]!;
+        for (int row = 0; row < record.FootprintHeight; row++)
+        {
+            for (int column = 0; column < record.FootprintWidth; column++)
+            {
+                if (record.IsHollow(row * record.FootprintWidth + column))
+                    Push(track, (record.Y + row) * track.Width + record.X + column, slot);
+            }
+        }
+    }
+
+    /// <summary>Validates the stacks of a glyph's footprint (pixels a copy did not sample).</summary>
+    private void PruneFootprint(GlyphRecord record, byte[] pixels)
+    {
+        SurfaceTrack track = record.Track;
+        for (int y = record.Y; y < record.Y + record.FootprintHeight; y++)
+        {
+            for (int x = record.X; x < record.X + record.FootprintWidth; x++)
+            {
+                int p = y * track.Width + x;
+                if ((uint)p < (uint)track.Depth.Length && track.Depth[p] != 0)
+                    Prune(track, p, pixels[p]);
+            }
+        }
     }
 
     /// <summary>Drops the stack of <paramref name="p"/> when its top glyph no longer explains the pixel.</summary>
@@ -387,15 +560,33 @@ public sealed class TextLayerTracker : IRasterCopyObserver
         public int[] Stack { get; } = new int[surface.Width * surface.Height * MaximumDepth];
 
         public byte[] Depth { get; } = new byte[surface.Width * surface.Height];
+
+        /// <summary>The buffer, weakly: a track whose buffer was collected is released.</summary>
+        public WeakReference<IndexedSurface> Surface { get; } = new(surface);
     }
 
-    /// <summary>One followed glyph: what it drew, where, and what it covered.</summary>
+    /// <summary>
+    /// One followed glyph: what it drew, where, and what it covered. Its footprint is the
+    /// rectangle of pixels it occupies on its surface; after a scaled copy every footprint column
+    /// and row maps to a column and row of the glyph cell, or to none (<see cref="NoCell"/>):
+    /// there the glyph is hollow (null maps = the cell itself).
+    /// </summary>
     private sealed class GlyphRecord
     {
+        private const byte NoCell = 0xFF;
+
         private readonly BitmapFont _font;
         private readonly bool _translate;
+        private readonly byte[]? _columnCells;
+        private readonly byte[]? _rowCells;
 
         public GlyphRecord(BitmapFont font, byte character, byte width, byte height, byte colour, byte background, byte[] under)
+            : this(font, character, width, height, colour, background, under, width, height, null, null)
+        {
+        }
+
+        private GlyphRecord(BitmapFont font, byte character, byte width, byte height, byte colour, byte background, byte[] under,
+            int footprintWidth, int footprintHeight, byte[]? columnCells, byte[]? rowCells)
         {
             _font = font;
             Character = character;
@@ -404,23 +595,40 @@ public sealed class TextLayerTracker : IRasterCopyObserver
             Colour = colour;
             Background = background;
             Under = under;
+            FootprintWidth = footprintWidth;
+            FootprintHeight = footprintHeight;
+            _columnCells = columnCells;
+            _rowCells = rowCells;
             _translate = font.InkIndex != colour || font.BackgroundIndex != background;
             Key = new GlyphKey((byte)font.Index, character);
-            ReadOnlySpan<byte> glyph = font.GetGlyph(character);
-            for (int cell = 0; cell < width * height && cell < glyph.Length; cell++)
+            for (int cell = 0; cell < footprintWidth * footprintHeight; cell++)
             {
-                if (IsForegroundValue(glyph[cell]))
+                if (IsForeground(cell))
                     ForegroundCount++;
             }
         }
 
         public SurfaceTrack Track { get; set; } = null!;
 
-        /// <summary>Buffer column of the cell's left edge.</summary>
+        /// <summary>Buffer column of the footprint's left edge.</summary>
         public short X { get; set; }
 
-        /// <summary>Buffer row of the cell's top edge.</summary>
+        /// <summary>Buffer row of the footprint's top edge.</summary>
         public short Y { get; set; }
+
+        public int FootprintWidth { get; }
+
+        public int FootprintHeight { get; }
+
+        /// <summary>Where the glyph cell's top-left corner lies (buffer coordinates; fractional after scaled copies).</summary>
+        public float OriginX { get; set; }
+
+        public float OriginY { get; set; }
+
+        /// <summary>Size of the cell relative to the font (1 unless scaled).</summary>
+        public float ScaleX { get; set; } = 1f;
+
+        public float ScaleY { get; set; } = 1f;
 
         public byte Character { get; }
 
@@ -434,32 +642,131 @@ public sealed class TextLayerTracker : IRasterCopyObserver
 
         public GlyphKey Key { get; }
 
-        /// <summary>The pixels before the glyph was drawn (cell order; shared with moved copies).</summary>
+        /// <summary>The pixels before the glyph was drawn (footprint order; shared with moved copies).</summary>
         public byte[] Under { get; }
 
         public int References { get; set; }
 
-        /// <summary>Foreground pixels of the cell (ink and fixed colours that are drawn).</summary>
+        /// <summary>Foreground pixels of the footprint (ink and fixed colours that are drawn).</summary>
         public int ForegroundCount { get; }
 
         /// <summary>Foreground pixels where the glyph is still in a valid stack.</summary>
         public int ForegroundReferences { get; set; }
 
-        /// <summary>All foreground pixels are intact (or covered only by later text).</summary>
-        public bool Drawable => ForegroundCount > 0 && ForegroundReferences == ForegroundCount;
+        /// <summary>
+        /// All foreground pixels are intact (or covered only by later text); a scaled glyph left
+        /// without foreground pixels needs its whole footprint.
+        /// </summary>
+        public bool Drawable => ForegroundCount > 0
+            ? ForegroundReferences == ForegroundCount
+            : References > 0 && References == FootprintWidth * FootprintHeight;
 
         /// <summary>List index in the layer being published (-1 = not drawn).</summary>
         public int Index { get; set; }
 
-        public int Cell(int p) => (p / Track.Width - Y) * Width + p % Track.Width - X;
+        private bool IsScaled => _columnCells is not null;
+
+        /// <summary>The footprint cell of buffer pixel <paramref name="p"/>.</summary>
+        public int Cell(int p) => (p / Track.Width - Y) * FootprintWidth + p % Track.Width - X;
+
+        /// <summary>True where the glyph has no classic pixel (a scaled copy sampled something else there).</summary>
+        public bool IsHollow(int cell) =>
+            _columnCells is not null && (_columnCells[cell % FootprintWidth] == NoCell || _rowCells![cell / FootprintWidth] == NoCell);
+
+        /// <summary>The glyph byte a footprint cell shows (not for hollow cells).</summary>
+        private byte Value(int cell) =>
+            _font.GetGlyph(Character)[_columnCells is null ? cell : _rowCells![cell / FootprintWidth] * Width + _columnCells[cell % FootprintWidth]];
 
         public GlyphRecord MovedTo(SurfaceTrack track, short x, short y) =>
-            new(_font, Character, Width, Height, Colour, Background, Under) { Track = track, X = x, Y = y };
+            new(_font, Character, Width, Height, Colour, Background, Under, FootprintWidth, FootprintHeight, _columnCells, _rowCells)
+            {
+                Track = track,
+                X = x,
+                Y = y,
+                OriginX = OriginX + (x - X),
+                OriginY = OriginY + (y - Y),
+                ScaleX = ScaleX,
+                ScaleY = ScaleY,
+            };
 
-        /// <summary>True when <paramref name="other"/> draws exactly the same pixels at the same place.</summary>
+        /// <summary>
+        /// The glyph after a scaled copy: every destination pixel (inside the clip) whose covered
+        /// source pixels meet its footprint; pixels that sample the footprint map to its cells,
+        /// the others are hollow and hold what the copy wrote. Null when there is no such pixel.
+        /// </summary>
+        public GlyphRecord? ScaledTo(SurfaceTrack track, in ScaledCopy copy, byte[] destinationPixels)
+        {
+            int left = -1, right = -1;
+            for (int x = copy.ClipLeft; x <= copy.ClipRight; x++)
+            {
+                var (start, end) = copy.CoveredColumns(x);
+                if (end > X && start < X + FootprintWidth)
+                {
+                    if (left < 0)
+                        left = x;
+                    right = x;
+                }
+                else if (left >= 0)
+                {
+                    break;
+                }
+            }
+            int top = -1, bottom = -1;
+            for (int y = copy.ClipTop; y <= copy.ClipBottom; y++)
+            {
+                var (start, end) = copy.CoveredRows(y);
+                if (end > Y && start < Y + FootprintHeight)
+                {
+                    if (top < 0)
+                        top = y;
+                    bottom = y;
+                }
+                else if (top >= 0)
+                {
+                    break;
+                }
+            }
+            if (left < 0 || top < 0)
+                return null;
+
+            int width = right - left + 1, height = bottom - top + 1;
+            var columns = new byte[width];
+            var footprintColumns = new int[width];
+            for (int i = 0; i < width; i++)
+            {
+                int column = copy.SourceX(left + i) - X;
+                footprintColumns[i] = column;
+                columns[i] = (uint)column >= (uint)FootprintWidth ? NoCell : _columnCells is null ? (byte)column : _columnCells[column];
+            }
+            var rows = new byte[height];
+            var under = new byte[width * height];
+            for (int j = 0; j < height; j++)
+            {
+                int row = copy.SourceY(top + j) - Y;
+                rows[j] = (uint)row >= (uint)FootprintHeight ? NoCell : _rowCells is null ? (byte)row : _rowCells[row];
+                for (int i = 0; i < width; i++)
+                {
+                    under[j * width + i] = rows[j] == NoCell || columns[i] == NoCell
+                        ? destinationPixels[(top + j) * track.Width + left + i]
+                        : Under[row * FootprintWidth + footprintColumns[i]];
+                }
+            }
+            return new GlyphRecord(_font, Character, Width, Height, Colour, Background, under, width, height, columns, rows)
+            {
+                Track = track,
+                X = (short)left,
+                Y = (short)top,
+                OriginX = copy.DestinationLeft + (OriginX - copy.SourceLeft) * copy.ScaleX,
+                OriginY = copy.DestinationTop + (OriginY - copy.SourceTop) * copy.ScaleY,
+                ScaleX = ScaleX * copy.ScaleX,
+                ScaleY = ScaleY * copy.ScaleY,
+            };
+        }
+
+        /// <summary>True when <paramref name="other"/> draws exactly the same pixels at the same place (unscaled glyphs only).</summary>
         public bool SameDraw(GlyphRecord other) =>
-            ReferenceEquals(_font, other._font) && Character == other.Character && X == other.X && Y == other.Y
-            && Colour == other.Colour && Background == other.Background;
+            !IsScaled && !other.IsScaled && ReferenceEquals(_font, other._font) && Character == other.Character
+            && X == other.X && Y == other.Y && Colour == other.Colour && Background == other.Background;
 
         /// <summary>The value DrawFontGlyph writes for a glyph byte (0xFF = nothing).</summary>
         private byte Written(byte value)
@@ -491,15 +798,17 @@ public sealed class TextLayerTracker : IRasterCopyObserver
 
         private bool IsForegroundValue(byte value) => value != 0xFF && !IsBackground(value) && Written(value) != 0xFF;
 
-        public bool IsForeground(int cell) => IsForegroundValue(_font.GetGlyph(Character)[cell]);
+        public bool IsForeground(int cell) => !IsHollow(cell) && IsForegroundValue(Value(cell));
 
         /// <summary>True when the glyph writes the pixel at <paramref name="cell"/> (foreground or opaque background).</summary>
-        public bool Writes(int cell) => Written(_font.GetGlyph(Character)[cell]) != 0xFF;
+        public bool Writes(int cell) => !IsHollow(cell) && Written(Value(cell)) != 0xFF;
 
         /// <summary>The pixel the glyph left at <paramref name="cell"/>.</summary>
         public byte Expected(int cell)
         {
-            byte written = Written(_font.GetGlyph(Character)[cell]);
+            if (IsHollow(cell))
+                return Under[cell];
+            byte written = Written(Value(cell));
             return written == 0xFF ? Under[cell] : written;
         }
 
@@ -509,7 +818,12 @@ public sealed class TextLayerTracker : IRasterCopyObserver
         /// </summary>
         public byte Back(int cell, out bool covers)
         {
-            byte value = _font.GetGlyph(Character)[cell];
+            if (IsHollow(cell))
+            {
+                covers = false;
+                return Under[cell];
+            }
+            byte value = Value(cell);
             byte written = Written(value);
             if (written == 0xFF)
             {

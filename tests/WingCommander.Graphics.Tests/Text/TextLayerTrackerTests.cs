@@ -285,4 +285,51 @@ public class TextLayerTrackerTests
         Assert.Equal(0, rig.Mask(100, 101));
         Assert.Equal(7, rig.Pixel(100, 101));
     }
+
+    [Fact]
+    public void ScaledCopy_ScalesTheGlyphs_AndKeepsTheirPixelsFollowed()
+    {
+        var rig = new Rig();
+        var buffer = new IndexedSurface(60, 6);
+        buffer.Clear(Paper);
+        rig.Context.Viewport = new Viewport(buffer, 0, 0, 59, 5);
+        rig.Draw('A', 0, 0);
+        rig.Draw('A', 30, 3);
+        // Half size into the screen at (100, 50).
+        rig.Gfx.CopyViewportContentsScaled(new Viewport(buffer, 0, 0, 59, 5), rig.Gfx.Screen!, 100, 50, 30, 3);
+        rig.Publish();
+        Assert.Equal(2, rig.Layer.Count);
+        var first = rig.Layer.Instances[0];
+        Assert.Equal(new GlyphKey(1, (byte)'A'), first.Glyph);
+        Assert.Equal(100f, first.X);
+        Assert.Equal(50f, first.Y);
+        Assert.Equal(0.5f, first.ScaleX);
+        Assert.Equal(0.5f, first.ScaleY);
+        var second = rig.Layer.Instances[1];
+        Assert.Equal(115f, second.X);
+        Assert.Equal(51.5f, second.Y);
+        Assert.NotEqual(0, rig.Mask(100, 50));
+        // A later fill over the copy makes the glyph classic again.
+        rig.Gfx.DrawFilledViewportRect(rig.Gfx.Screen!, 100, 50, 101, 51, 3);
+        rig.Publish();
+        Assert.Equal(1, rig.Layer.Count);
+    }
+
+    [Fact]
+    public void ScaledCopy_KeepsGlyphsTheSamplingSkips_AsHollowGlyphs()
+    {
+        var rig = new Rig();
+        var buffer = new IndexedSurface(60, 3);
+        buffer.Clear(Paper);
+        rig.Context.Viewport = new Viewport(buffer, 0, 0, 59, 2);
+        rig.Draw('B', 5, 0); // columns 5-6: a third-size copy samples columns 1, 4, 7, ...
+        rig.Draw('A', 9, 0); // column 10 is sampled
+        rig.Gfx.CopyViewportContentsScaled(new Viewport(buffer, 0, 0, 59, 2), rig.Gfx.Screen!, 100, 50, 20, 1);
+        rig.Publish();
+        Assert.Equal(2, rig.Layer.Count);
+        Assert.Contains(rig.Layer.Instances.ToArray(), i => i.Glyph.Character == (byte)'B' && Math.Abs(i.X - (100 + 5 / 3f)) < 1e-4);
+        Assert.Contains(rig.Layer.Instances.ToArray(), i => i.Glyph.Character == (byte)'A' && Math.Abs(i.X - 103f) < 1e-4);
+        Assert.NotEqual(0, rig.Mask(101, 50)); // the hollow glyph may draw over the pixels covering its cell
+        Assert.Equal(Paper, rig.Pixel(101, 50)); // which keep what the copy wrote
+    }
 }

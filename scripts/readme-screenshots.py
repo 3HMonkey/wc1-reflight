@@ -33,12 +33,13 @@ BAR = NEW_GAME + "; 24000 click 215 60; 28000 key 0x39 0x20; 30000 click 185 110
 
 # Barracks door, mission hangar, skip the briefing (Esc), autopilot (A), lock target (L), hide the
 # key help (F10), chase view (F5), target view (F7), guns (Space), cockpit (F1), pause menu (Esc),
-# cursor out of the way (the first move after the flight's pointer warp is ignored), Settings.
+# cursor out of the way (the first move after the flight's pointer warp is ignored), Settings,
+# Flight keys (Up twice from the first row).
 FLIGHT = (NEW_GAME + "; 27000 click 300 100; 30000 click 300 60; 37000 key 0x01 0x1b; 51000 key 0x1e 0x41; "
           "61000 key 0x26 0x4c; 62500 key 0x44 0x79; 63000 key 0x3f 0x74; 70000 key 0x41 0x76; "
           + "; ".join(f"{62000 + i * 700} key 0x39 0x20" for i in range(21))
           + "; 78000 key 0x3b 0x70; 79000 key 0x01 0x1b; 79500 move 316 196; 79600 move 316 196; "
-          "81000 key 0x50 0x28; 81500 key 0x1c 0x0d")
+          "81000 key 0x50 0x28; 81500 key 0x1c 0x0d; 84000 key 0x48 0x26; 84300 key 0x48 0x26; 84600 key 0x1c 0x0d")
 
 CLASSIC = ["--classic-space", "--classic-text"]
 CHEATS = "Origin -k x"  # the last argument is dropped by the original's argument loop
@@ -91,7 +92,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="wc1-screenshots-") as work:
         wide = snap(work, "flight-wide", "1920x1080", FLIGHT, [58000, 73250], args=CHEATS)
-        flight = snap(work, "flight", "1440x1080", FLIGHT, [36000, 73250, 80000, 83000], args=CHEATS)
+        flight = snap(work, "flight", "1440x1080", FLIGHT, [36000, 73250, 80000, 83000, 86000], args=CHEATS)
         flight_classic = snap(work, "flight-classic", "1440x1080", FLIGHT, [36000, 73250], CLASSIC, args=CHEATS)
         bar = snap(work, "bar", "1440x1080", BAR, [26000, 33000])
         bar_classic = snap(work, "bar-classic", "1440x1080", BAR, [26000], CLASSIC)
@@ -100,6 +101,8 @@ def main():
         save(wide[58000], "cockpit-key-help.png")
         save(flight[80000], "pause-menu.png")
         save(flight[83000], "settings.png")
+        save(flight[86000], "flight-keys.png")
+        save(flight[36000], "briefing.png")
         save(bar[26000], "kill-board.png")
         save(bar[33000], "conversation.png")
 
@@ -110,6 +113,10 @@ def main():
         subtitle = (30, 845, 1420, 995)
         save(side_by_side([label(flight_classic[36000].crop(subtitle), "ORIGINAL", 26),
                            label(flight[36000].crop(subtitle), "REFLIGHT", 26)], horizontal=False), "compare-text.png")
+
+        board = (0, 170, 980, 780)
+        save(side_by_side([label(flight_classic[36000].crop(board), "ORIGINAL", 30),
+                           label(flight[36000].crop(board), "REFLIGHT", 30)], horizontal=True), "compare-board.png")
 
         half = (720, 540)
         save(side_by_side([label(bar_classic[26000].resize(half, Image.LANCZOS), "ORIGINAL", 22),

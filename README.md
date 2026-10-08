@@ -19,7 +19,9 @@ renderer, sharp ships and text at any screen resolution, and the original music 
 | Ships in space | Pixel sprites scaled inside 320x200 | Ships, missiles, explosions and asteroids are drawn at your screen resolution (smooth scaling and rotation, far sharper ship models); the cockpit and HUD stay pixel-exact on top |
 | Text | Four pixel fonts | All text drawn at screen resolution: crisp vectorized originals or modern replacement fonts (see [Fonts](#fonts)); text drawn into off-screen buffers (space view, scenes, saved backgrounds) is followed too |
 | Help | Printed manual | **F10** shows the flight controls next to the cockpit (in the side margins of widescreen displays, otherwise as a panel) |
-| Menus | None | **Esc** opens a pause menu (in flight, in the rooms and on the title) with **settings**: volumes, fullscreen, filter, aspect ratio, vsync, sharp text, fonts, key help; saved in `config.json` |
+| Menus | None | **Esc** opens a pause menu (in flight, in the rooms and on the title) with **settings**: volumes, fullscreen, filter, aspect ratio, vsync, sharp text, fonts, key help and **flight keys** (every flight control can be put on another key); saved in `config.json` |
+| Briefing | The wall screen shows the same shrunken, unreadable map in every briefing | The wall screen shows this mission's nav map, its text sharp and readable |
+| Mouse | The cursor moves with the game's 16 frames per second | The cursor follows the mouse at the display's refresh rate |
 | Sound | AdLib / Sound Blaster | The original Origin FX music and sound effects on an emulated OPL2 (port of ymfm) |
 | Saves | Next to the game | In your user data folder; existing DOS saves are imported automatically |
 | Controls | DOS keyboard repeat | Key repeat identical on every system, Alt+X quits anywhere |
@@ -39,6 +41,10 @@ Ships, shots and explosions keep their detail instead of being shrunk into 320x2
 Text is drawn at screen resolution, here in the replacement font of conversations and briefings:
 
 ![Subtitle text: the original pixel font scaled up next to the sharp replacement font](docs/images/compare-text.png)
+
+The briefing's wall screen shows the mission's own map, its text readable:
+
+![Briefing board: the fixed, unreadable art of the original next to this mission's map in WC1 Reflight](docs/images/compare-board.png)
 
 ### In the game
 
@@ -63,6 +69,14 @@ Text is drawn at screen resolution, here in the replacement font of conversation
   <tr>
     <td><em>Conversations and briefings in Tektur.</em></td>
     <td><em>The kill board in the CHAWP chalk font.</em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/flight-keys.png" alt="The flight keys page of the settings"></td>
+    <td width="50%"><img src="docs/images/briefing.png" alt="The briefing with the mission's map on the wall screen"></td>
+  </tr>
+  <tr>
+    <td><em>Flight keys: every control on the key you want.</em></td>
+    <td><em>The briefing board with the mission's map.</em></td>
   </tr>
 </table>
 
@@ -96,7 +110,8 @@ variable. Useful options:
 | `-- <switches>` | The original game's command-line switches |
 
 In flight, all original controls apply; **Esc** opens the pause menu with the settings, **F10**
-toggles the key help, **Alt+X** quits. The settings are saved in `config.json`; command-line
+toggles the key help, **Alt+X** quits. Settings > Flight keys puts any flight control on another
+key (the key help shows your keys). The settings are saved in `config.json`; command-line
 options override them for one run.
 
 ### Native executable
@@ -154,7 +169,7 @@ code and the porting notes.
 
 ## Roadmap
 
-- Key bindings in the settings menu (`controls` section of `config.json`)
+- Backgrounds widened to 16:9 and 16:10 for the rooms and scenes
 - Joystick and gamepad support
 - 3D ship models (glTF, PBR) and ray-traced effects on capable GPUs
 

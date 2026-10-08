@@ -408,4 +408,65 @@ public class EventManagerTests
         PumpAt(r, 2_000);
         Assert.Equal(1, CountKeyDowns(r, 0x39));
     }
+
+    private static KeyTranslation GunsOnF()
+    {
+        var bindings = new KeyBindings();
+        bindings.Bind(FlightAction.FireGuns, 0x21);
+        return new KeyTranslation(bindings);
+    }
+
+    [Fact]
+    public void Key_bindings_apply_only_while_the_flight_reads_them()
+    {
+        var r = Create();
+        r.Events.KeyTranslation = GunsOnF();
+        r.KeyPress(0, 0x21, 'F');
+        PumpAt(r, 100);
+        Assert.Equal(1, CountKeyDowns(r, 0x21)); // not active: F is F
+
+        r.Events.KeyTranslationActive = true;
+        r.At(200, Key(true, 0x21, 'F'));
+        PumpAt(r, 210);
+        Assert.Equal(1, r.Events.InputKeyState[0x39]);
+        Assert.True(r.Events.IsKeyPhysicallyDown(0x39));
+        Assert.Equal(1, CountKeyDowns(r, 0x39)); // F fires the guns like Space
+        r.At(250, Key(false, 0x21, 'F'));
+        PumpAt(r, 260);
+        Assert.Equal(0, r.Events.InputKeyState[0x39]);
+        CountKeyDowns(r, 0x39); // drains the release
+
+        r.KeyPress(300, 0x39, ' ');
+        PumpAt(r, 400);
+        Assert.Equal(0, r.Events.QueuedCount); // Space moved away: it does nothing
+        Assert.Equal(0, r.Events.InputKeyState[0x39]);
+    }
+
+    [Fact]
+    public void Keys_pressed_with_ctrl_or_alt_are_not_translated()
+    {
+        var r = Create();
+        r.Events.KeyTranslation = GunsOnF();
+        r.Events.KeyTranslationActive = true;
+        r.At(0, Key(true, 0x1d, 0x11));
+        r.At(10, Key(true, 0x21, 'F', HostModifiers.Control));
+        PumpAt(r, 20);
+        Assert.Equal(1, CountKeyDowns(r, 0x21));
+    }
+
+    [Fact]
+    public void A_key_held_while_the_bindings_switch_off_releases_what_it_pressed()
+    {
+        var r = Create();
+        r.Events.KeyTranslation = GunsOnF();
+        r.Events.KeyTranslationActive = true;
+        r.At(0, Key(true, 0x21, 'F'));
+        PumpAt(r, 10);
+        r.Events.KeyTranslationActive = false; // the flight ended or a menu opened
+        r.At(100, Key(false, 0x21, 'F'));
+        PumpAt(r, 110);
+        Assert.False(r.Events.IsKeyPhysicallyDown(0x39));
+        Assert.False(r.Events.IsKeyPhysicallyDown(0x21));
+        Assert.Equal(0, r.Events.InputKeyState[0x39]);
+    }
 }

@@ -1,5 +1,6 @@
 using WingCommander.Core.Rendering;
 using WingCommander.Core.Resources;
+using WingCommander.Game.Input;
 
 namespace WingCommander.Game.Config;
 
@@ -23,6 +24,7 @@ public interface IDisplayControl
 /// "display":   { "fullscreen": false, "filter": "sharp", "aspect": "4:3", "integerScaling": false, "vsync": true }
 /// "text":      { "sharp": true, "modernFonts": true }
 /// "interface": { "keyHelp": true }
+/// "controls":  { "fireGuns": "Space", "steerUp": "Up", ... }          key bindings (ADR-016)
 /// </code>
 /// Missing values keep their defaults; values of the wrong type are ignored.
 /// </summary>
@@ -54,6 +56,9 @@ public sealed class UserSettings
     /// <summary>The flight key help (F10).</summary>
     public bool KeyHelp { get; set; } = true;
 
+    /// <summary>The keys of the flight controls.</summary>
+    public KeyBindings Controls { get; private set; } = new();
+
     /// <summary>Reads the settings from <paramref name="configuration"/> over the values of <paramref name="defaults"/>.</summary>
     public static UserSettings Read(GameConfiguration? configuration, UserSettings? defaults = null)
     {
@@ -80,6 +85,7 @@ public sealed class UserSettings
             settings.ModernFonts = modern;
         if (configuration.TryGetBool("interface", "keyHelp", out bool keyHelp))
             settings.KeyHelp = keyHelp;
+        settings.Controls.Read(id => configuration.TryGetString("controls", id, out string key) ? key : null);
         return settings;
     }
 
@@ -97,6 +103,7 @@ public sealed class UserSettings
         configuration.SetBool("text", "sharp", SharpText);
         configuration.SetBool("text", "modernFonts", ModernFonts);
         configuration.SetBool("interface", "keyHelp", KeyHelp);
+        Controls.Write((id, key) => configuration.SetString("controls", id, key));
     }
 
     /// <summary>Copies the display settings into a renderer's settings.</summary>
@@ -120,7 +127,12 @@ public sealed class UserSettings
         VSync = display.Renderer.VSync;
     }
 
-    public UserSettings Clone() => (UserSettings)MemberwiseClone();
+    public UserSettings Clone()
+    {
+        var copy = (UserSettings)MemberwiseClone();
+        copy.Controls = Controls.Clone();
+        return copy;
+    }
 
     public static string FilterName(ScalingFilter filter) => filter switch
     {

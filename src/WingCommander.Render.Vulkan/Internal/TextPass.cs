@@ -404,8 +404,8 @@ internal sealed unsafe class TextPass : IDisposable
     {
         X = glyph.X,
         Y = glyph.Y,
-        Width = image.Width,
-        Height = image.Height,
+        Width = image.Width * glyph.ScaleX,
+        Height = image.Height * glyph.ScaleY,
         FieldX = entry.X,
         FieldY = entry.Y,
         FieldWidth = entry.Width,

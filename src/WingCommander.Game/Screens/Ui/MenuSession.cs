@@ -23,6 +23,7 @@ internal sealed class MenuSession
     private readonly short _cursorFrame;
     private readonly int _cursorShowCount;
     private readonly bool _keyEventQueue;
+    private readonly bool _keyTranslation;
     private readonly byte _inputMode;
     private readonly TextContext? _textContext;
     private readonly bool _releaseMouse;
@@ -39,12 +40,14 @@ internal sealed class MenuSession
         _cursorFrame = events.Cursor.Frame;
         _cursorShowCount = events.CursorShowCount;
         _keyEventQueue = events.KeyEventQueueEnabled;
+        _keyTranslation = events.KeyTranslationActive;
         _inputMode = events.InputMode;
         _textContext = gfx.CurrentTextContext;
         _releaseMouse = releaseMouse;
 
         events.FlushInputEvents();
         events.KeyEventQueueEnabled = false;
+        events.KeyTranslationActive = false; // the menu reads the keys themselves (ADR-016)
         events.InputMode = 1;
         if (releaseMouse)
             events.SetMouseGrab(false);
@@ -77,6 +80,7 @@ internal sealed class MenuSession
         _game.Cursor.SetFrame(_cursorFrame);
         events.CursorShowCount = _cursorShowCount;
         events.KeyEventQueueEnabled = _keyEventQueue;
+        events.KeyTranslationActive = _keyTranslation;
         events.InputMode = _inputMode;
         if (_releaseMouse)
             events.SetMouseGrab(true);
@@ -118,16 +122,18 @@ internal sealed class MenuSession
     }
 
     /// <summary>
-    /// The next key press, mouse button or mouse move; while none is queued the frame is presented
-    /// (16 or 20 fps), so a menu redrawn before the call becomes visible.
+    /// The next key press, mouse button or mouse move (and key release with
+    /// <paramref name="keyReleases"/>); while none is queued the frame is presented (16 or 20 fps),
+    /// so a menu redrawn before the call becomes visible.
     /// </summary>
-    public async Task<(short Type, InputEventState Event)> NextEventAsync()
+    public async Task<(short Type, InputEventState Event)> NextEventAsync(bool keyReleases = false)
     {
         var e = new InputEventState();
         while (true)
         {
             short type = _game.Events.PollInputEvent(ref e);
-            if (type is InputEventType.KeyDown or InputEventType.ButtonDown or InputEventType.MouseMove)
+            if (type is InputEventType.KeyDown or InputEventType.ButtonDown or InputEventType.MouseMove
+                || (keyReleases && type == InputEventType.KeyUp))
                 return (type, e);
             await _game.Display.PresentAsync();
         }
