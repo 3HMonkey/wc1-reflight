@@ -1,0 +1,26 @@
+# Reference reverse-engineering repo (cloned separately, see docs/README.md)
+reference/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+*.swp
+TestResults/
+artifacts/
+publish/
+out/
+*.binlog
+
+# Game data must never be committed
+gamedata/
+*.VGA
+*.V0*
+*.V1*
+*.V2*
+
+# Local configuration (path to the game data); see config.example.json
+config.json

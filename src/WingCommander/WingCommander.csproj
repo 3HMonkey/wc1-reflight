@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wc1</AssemblyName>
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <StripSymbols>true</StripSymbols>
+    <SelfContained>true</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WingCommander.Game\WingCommander.Game.csproj" />
+    <ProjectReference Include="..\WingCommander.Game.Flight\WingCommander.Game.Flight.csproj" />
+    <ProjectReference Include="..\WingCommander.Host.Sdl\WingCommander.Host.Sdl.csproj" />
+    <ProjectReference Include="..\WingCommander.Render.Vulkan\WingCommander.Render.Vulkan.csproj" />
+  </ItemGroup>
+
+  <!-- Licences of the bundled third-party code and fonts (ymfm, Tektur, SPACE WING LEADER, CHAWP). -->
+  <ItemGroup>
+    <None Include="..\..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The space flight layer: RunSpaceFlight, cockpit, HUD, controls, flight sequences and the
+    attract scenes, on top of the Simulation library. Kept out of WingCommander.Game so the Game
+    project builds and tests without the simulation; plugged in through Game.Flow.IFlightLayer.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../WingCommander.Game/WingCommander.Game.csproj" />
+    <ProjectReference Include="../WingCommander.Simulation/WingCommander.Simulation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WingCommander.Game.Flight.Tests" />
+  </ItemGroup>
+
+</Project>

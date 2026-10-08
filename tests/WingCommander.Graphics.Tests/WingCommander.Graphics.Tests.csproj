@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/WingCommander.Graphics/WingCommander.Graphics.csproj" />
+  </ItemGroup>
+
+</Project>

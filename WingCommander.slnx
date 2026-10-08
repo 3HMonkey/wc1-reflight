@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/WingCommander.Audio.Tests/WingCommander.Audio.Tests.csproj" />
+    <Project Path="tests/WingCommander.Core.Tests/WingCommander.Core.Tests.csproj" />
+    <Project Path="tests/WingCommander.Game.Flight.Tests/WingCommander.Game.Flight.Tests.csproj" />
+    <Project Path="tests/WingCommander.Game.Tests/WingCommander.Game.Tests.csproj" />
+    <Project Path="tests/WingCommander.Graphics.Tests/WingCommander.Graphics.Tests.csproj" />
+    <Project Path="tests/WingCommander.Render.Vulkan.Tests/WingCommander.Render.Vulkan.Tests.csproj" />
+    <Project Path="tests/WingCommander.Simulation.Tests/WingCommander.Simulation.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/WingCommander.ShaderBuild/WingCommander.ShaderBuild.csproj" />
+  </Folder>
+  <Project Path="src/WingCommander.Audio/WingCommander.Audio.csproj" />
+  <Project Path="src/WingCommander.Core/WingCommander.Core.csproj" />
+  <Project Path="src/WingCommander.Game.Flight/WingCommander.Game.Flight.csproj" />
+  <Project Path="src/WingCommander.Game/WingCommander.Game.csproj" />
+  <Project Path="src/WingCommander.Graphics/WingCommander.Graphics.csproj" />
+  <Project Path="src/WingCommander.Host.Sdl/WingCommander.Host.Sdl.csproj" />
+  <Project Path="src/WingCommander.Render.Vulkan/WingCommander.Render.Vulkan.csproj" />
+  <Project Path="src/WingCommander.Simulation/WingCommander.Simulation.csproj" />
+  <Project Path="src/WingCommander.Tools/WingCommander.Tools.csproj" />
+  <Project Path="src/WingCommander/WingCommander.csproj" />
+</Solution>

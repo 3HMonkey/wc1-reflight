@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Development tool: compiles the GLSL shaders of WingCommander.Render.Vulkan to SPIR-V with
+    shaderc from NuGet (Vortice.ShaderCompiler -> Silk.NET.Shaderc.Native), so no Vulkan SDK is
+    needed. The .spv files are checked in and embedded into the renderer; the shipped game never
+    loads a shader compiler. See docs/BUILD.md, "Vulkan renderer and shaders".
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wc1-shaderbuild</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.ShaderCompiler" Version="1.9.0" />
+  </ItemGroup>
+
+</Project>

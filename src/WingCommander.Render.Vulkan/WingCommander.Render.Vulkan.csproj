@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.Vulkan" Version="3.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../WingCommander.Core/WingCommander.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    Shaders: GLSL sources in Shaders/, SPIR-V compiled by tools/WingCommander.ShaderBuild into
+    Shaders/Compiled/ (checked in; a test fails when they are stale). Only the SPIR-V is embedded,
+    the shipped renderer never loads a shader compiler. See docs/BUILD.md.
+  -->
+  <ItemGroup>
+    <None Include="Shaders/*.vert;Shaders/*.frag;Shaders/*.comp" />
+    <EmbeddedResource Include="Shaders/Compiled/*.spv" LogicalName="WingCommander.Render.Vulkan.Shaders.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WingCommander.Render.Vulkan.Tests" />
+  </ItemGroup>
+
+</Project>

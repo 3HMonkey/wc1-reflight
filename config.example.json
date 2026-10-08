@@ -1,0 +1,6 @@
+{
+  // Copy this file to config.json (which is not committed) and point it to your copy of
+  // Wing Commander (the GOG "Wing Commander 1+2" install or its GAMEDAT folder).
+  // Windows paths need doubled backslashes; forward slashes work on every platform.
+  "gameDirectory": "C:/GOG Games/Wing Commander"
+}

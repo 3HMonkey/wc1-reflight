@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Simulation is added as a reference when the flight layer is integrated (docs/STATUS.md). -->
+  <ItemGroup>
+    <ProjectReference Include="../WingCommander.Core/WingCommander.Core.csproj" />
+    <ProjectReference Include="../WingCommander.Graphics/WingCommander.Graphics.csproj" />
+    <ProjectReference Include="../WingCommander.Audio/WingCommander.Audio.csproj" />
+  </ItemGroup>
+
+  <!-- Replacement fonts of the output-resolution text (ADR-013), compiled in (licences: THIRD-PARTY-NOTICES.txt). -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../assets/fonts/**/*.ttf" LogicalName="fonts/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

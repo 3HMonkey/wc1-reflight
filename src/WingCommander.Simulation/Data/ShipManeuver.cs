@@ -1,0 +1,58 @@
+namespace WingCommander.Simulation.Data;
+
+/// <summary>
+/// Bottom level of the AI hierarchy (<c>aeShipManeuver</c>): index into the 47-entry maneuver
+/// handler table. Entries 44..46 have no recovered original name.
+/// </summary>
+/// <remarks>C: enum ShipManeuver (include/wcdata.h).</remarks>
+public enum ShipManeuver
+{
+    None = -1,
+    WarpingIn = 0,
+    WarpingOut = 1,
+    VeerAway = 2,
+    Drift = 3,
+    FullAhead = 4,
+    Thinking = 5,
+    RamMissile = 6,
+    KickStop = 7,
+    TightLoop = 8,
+    HardBrake = 9,
+    SitNSpin = 10,
+    TurnNSpin = 11,
+    Burnout = 12,
+    Wabble = 13,
+    RollOver = 14,
+    HardTurn = 15,
+    FishHook = 16,
+    SplitLeft = 17,
+    SitNFire = 18,
+    Kickit = 19,
+    TurnNKick = 20,
+    OutaHere = 21,
+    DropAMine = 22,
+    SplitRight = 23,
+    ZigZag = 24,
+    Gloat = 25,
+    TailFire = 26,
+    TargetLaser = 27,
+    TargetMissile = 28,
+    StrafeEnemy = 29,
+    StrafeNRoll = 30,
+    KillMissile = 31,
+    SuicideRun = 32,
+    ZigZagPitch = 33,
+    SafeBrake = 34,
+    TurnNFire = 35,
+    GetDistance = 36,
+    Corkscrew = 37,
+    Intercept = 38,
+    Try2Tail = 39,
+    ZipPast = 40,
+    BuzzDebris = 41,
+    LineUpDrop = 42,
+    Chill = 43,
+    Unknown44 = 44,
+    Unknown45 = 45,
+    Unknown46 = 46,
+}

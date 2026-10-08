@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wc1tool</AssemblyName>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WingCommander.Core\WingCommander.Core.csproj" />
+    <ProjectReference Include="..\WingCommander.Graphics\WingCommander.Graphics.csproj" />
+    <ProjectReference Include="..\WingCommander.Audio\WingCommander.Audio.csproj" />
+    <ProjectReference Include="..\WingCommander.Simulation\WingCommander.Simulation.csproj" />
+    <ProjectReference Include="..\WingCommander.Game\WingCommander.Game.csproj" />
+    <ProjectReference Include="..\WingCommander.Game.Flight\WingCommander.Game.Flight.csproj" />
+  </ItemGroup>
+
+  <!-- Licences of the bundled third-party code and fonts (ymfm, Tektur, SPACE WING LEADER, CHAWP). -->
+  <ItemGroup>
+    <None Include="..\..\THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-NOTICES.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

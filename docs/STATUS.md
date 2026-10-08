@@ -1,0 +1,350 @@
+# Status Journal
+
+Newest entry first. Each entry: date, what was done, what was learned, what is next.
+Subsystem details live in `progress/*.md`; this file is the project journal.
+
+## 2026-10-08 — Session 3: sharp text, replacement fonts, key help, config.json, public repo
+
+### Done
+- ADR-013: text at output resolution. `TextLayerTracker` (Graphics) follows every glyph the game
+  draws and every raster copy that moves it (space buffer, scene buffers, saved backgrounds);
+  a glyph is drawn sharp only while all its ink is intact, so erased lines leave no fragments.
+  `RenderFrame.Text` is published with every present; the cursor stays on top.
+- Glyph images: vectorized originals (`PixelOutline`: staircases become diagonals, caps and
+  corners stay square) and TrueType replacements fitted into the original cells (`TrueTypeFont`
+  reader, `FontReplacement`). Bundled with licences in `assets/fonts/`: Tektur SemiBold (font 0,
+  OFL), SPACE WING LEADER (fonts 1 and 2, CC BY 3.0), CHAWP (font 3, OFL); credited in README.
+- Vulkan text pass (RG8 glyph atlas, R16 mask, overlay pass; 27 new GPU tests, validation clean,
+  0 allocations in the steady state); `ReferenceCompositor` is the CPU reference.
+- Flight key help (`FlightKeyHelp`, `KeyHelpLayout`): side margins on wide windows, otherwise a
+  panel; F10 toggles it (port hotkey), saved as `KeyHelp=0` in wc1.cfg.
+- `config.json` (`gameDirectory`, gitignored; `config.example.json` committed) replaces the
+  hard-coded path in wc1, wc1tool and the tests (`GameConfiguration`, `GameDirectory.Locate`).
+- wc1: `--classic-text`, `--original-fonts`; window test skips text and key help pixels.
+- `build.bat`: native, self-contained, trimmed Windows build into `publish\<rid>` with three
+  files (wc1.exe 4.25 MB with the fonts embedded, SDL3.dll, THIRD-PARTY-NOTICES.txt); window test
+  of the published binary: 8 captures ok, 0 validation messages.
+  wc1tool: `snap --hd WxH`, `hd-text`, `font-metrics`.
+- README rewritten for the public repository (github.com/3HMonkey/wc1-reflight): features and
+  differences to the original, fonts and credits. Docs no longer contain personal paths.
+- Tests: Core 61, Graphics 178, Audio 240, Simulation 418, Render.Vulkan 100, Game 227,
+  Game.Flight 231 (1,455) — all green.
+
+### Learned
+- Per-pixel validity alone is not enough: cleared subtitles keep their background pixels, so a
+  glyph must be complete (all ink intact) to be drawn; replacement fonts made this visible.
+- Rectangle copies report one run per row: glyph clones must be shared per copy operation.
+
+### Next
+- Pause menu on Esc with settings (volumes, key bindings, display) stored in config.json.
+- Joystick/gamepad layer; playtesting on screen; R2b interpolation, R3 meshes, R4 ray tracing.
+- Key help: a 4:3 window shows it as a panel over the picture; widescreen shows it beside it.
+
+## 2026-10-08 — Session 2 (later): flight and AI complete, sprites on Vulkan live
+
+### Done
+- Flight UI port DONE (docs/progress/flight.md): flight loop, CPU space view,
+  cockpit, HUD, instruments, controls, VDUs, comm menu, nav map, all sequences (scramble, launch,
+  landing approach and landing, autopilot cinema, ejection, stranded, death), TrainSim flight
+  (ITrainSimFlight), canned scenes for the endings, attract mode, audio bridges, R2 sprite
+  recording (FlightSession.SpaceSprites.cs). 231 tests.
+- Simulation phase 3 AI DONE (see the entry below); objective -1 fix in integration
+  (MobileObjective/LocateMobileObjective/SetObjectiveRange go through ObjectiveRecord; test).
+- wc1: FlightOptions from the command line; R2 sprites on when the Vulkan renderer supports them;
+  `--classic-space` (CPU path) and `--ks-literal` (ADR-012 visual fixes off). Window test skips
+  sample points of the space background index while sprites are active.
+- On screen (Vulkan, validation on): attract dogfight with ~8,000 GPU sprites in the window test,
+  0 failures, 0 validation errors/warnings; classic path also 0 failures. NativeAOT: 3.5 MB, no
+  ILC warnings, window test passes with audio.
+- wc1tool snap plugs the flight layer (CPU path): headless end-to-end title -> new game ->
+  "Get Ready" -> forced TrainSim flight -> name entry, all looked at.
+- StartupOptions.StartNavPointOverride defaults to -1 (C default; "as0" now means nav 0);
+  CampaignFlow toggles the virtual-key duplicates like GameFlow (off in the rooms, on from the
+  briefing).
+- Tests: Core 35, Graphics 155, Audio 240, Simulation 418, Render.Vulkan 73, Game 222,
+  Game.Flight 231 (1,374) — all green.
+
+### Open / decisions for the user
+- Keyboard quirk kept from KS/SDL: the virtual-key duplicate of letter keys acts as a steering
+  scan code in flight: Ctrl+M raises the music volume instead of toggling music, Ctrl+P lowers
+  the effects volume instead of pausing, L centres the stick, H/P nudge the pitch for a tick.
+- DOS title look: the DOS screenshot shows WING/COMMANDER logo parts above and below the attract
+  view (left by the DOS intro overlay, whose code is not in the reference); the port shows black
+  there like KS.
+- Joystick/gamepad layer, R2b interpolation, R3 (glTF meshes), R4 (ray tracing); merge
+  Rooms.MedalsView with SceneDirector.ViewMedalsAsync and the nav map code of briefing and flight.
+- Confirm DivideFixed precision and the index -1 memory layout against a running KS executable.
+
+## 2026-10-08 — Session 2: requests of the flight port, cleanup, work streams resumed
+
+### Done (integration)
+- Display: `SlamRealNow` / `HasDeferredPresents` / `SettleDeferredPresentsAsync` (presents inside
+  synchronous simulation code; `SlamRealAsync` settles owed waits first); 2 tests prove the same
+  virtual end time as immediate presents.
+- EventManager: Alt+X throws `GameExitException` everywhere (ADR-012), test via GameMain.
+- Graphics: `MeasureScaledIntroTextWidth` / `DrawCenteredScaledIntroText` (mono.c 0x403710/0x4037A0)
+  for the attract mode and logo zoom, 2 tests.
+- CampaignSession.SavedCampaignDate starts at {20, 340} like the C global.
+- Duplicate star field removed: the rec room uses `Screens.Scenes.ConstellationField`.
+  `Rooms.MedalsView` and `SceneDirector.ViewMedalsAsync` stay separate for now (different screen
+  set-ups: barracks scene buffer vs conversation stage); merge later with care.
+- Docs: progress index lists all progress files; gameflow-screens.md §10 collects the porting
+  corrections; progress/game.md deviations.
+- NativeAOT publish: 2.9 MB, no ILC warnings, runs on Vulkan. Full suite green before the
+  work streams resumed (Core 35, Graphics 155, Audio 240, Simulation 346, Render.Vulkan 73, Game 222,
+  Game.Flight 2).
+- Decision: the SM2 Dralthi uses the Hornet cockpit (cockpit 0, PCSHIP.V00) as fallback.
+
+### Work streams running
+- Flight UI port: M1..M7 of its plan in docs/progress/flight.md.
+- Simulation phase 3 AI: DONE. Full AI (smart.c, 47 maneuvers, mission
+  handlers, capital ships), warp, objective tracking, comm orders (Request accepts -1), autopilot
+  split; 417 tests; clang differential check of 1,000 random scenarios x 1,000 frames: 17,786,104
+  state lines identical; index -1 reads reproduce the KS memory layout; float-to-int wraps like
+  MSVC _ftol (Core FixedMath.Truncate already does). New interface members (SpaceBufferFlash,
+  ShowCockpitMessage, ResetSoundState, ICockpitState.MessageShowing) forwarded to the flight work stream.
+  Verified in integration (417 green, wc1tool flight 2 0 3000 7 --aim: Dralthi attack, 1 kill).
+  Open: confirm DivideFixed precision and the index -1 layout against a running KS executable;
+  Spikeri resources (SHIP.V14 question).
+
+## 2026-10-08 — Session 1 (late night): screens done, flight layer started
+
+### Done
+- Rooms work stream DONE (docs/progress/screens-rooms.md): rec room + kill board, barracks (save/load
+  byte-exact, quit, medals), modal UI and text input, all TrainSim menus incl. name entry;
+  seam `Screens.Rooms.ITrainSimFlight` for the flight layer.
+- Scenes work stream DONE (docs/progress/screens-scenes.md): SceneDirector conversations, briefing +
+  nav map, scramble walk, debriefing, office, medals, funerals, MIDGAME V00..V08, The End; whole
+  campaigns run headless through all scenes. Victory/escape 3D parts use the new
+  `IFlightLayer.BeginCannedScene` (black view without a flight layer).
+- Flight UI specification DONE: docs/analysis/flight-ui.md (~2050 lines, milestones M1..M8);
+  its corrections applied to gameflow-screens.md and graphics.md; ADR-012 records the defaults
+  (literal gameplay, visual fixes with switches, Alt+X, key repeat, SM2 cockpit, boundary).
+- Integration: GameDirectory thread-safe; game-wide `GameAudio.Sfx` + `SoundWorldSlot`;
+  `Display.Presented` hook (for R2); flight seam extended (ObjectiveSighted, BeginCannedScene;
+  BriefedPlayerShipType now from the briefed MODULE data; player funeral after DeathSequence);
+  key repeat normalised in EventManager (OS repeats ignored, 500 ms then 30/s on the virtual
+  clock, counter-based so no drift; 6 new tests).
+- Tests: Core 35, Graphics 153, Audio 240, Simulation 346, Render.Vulkan 73, Game 219,
+  Game.Flight 2 (all green at the last full run except the 3 repeat tests, fixed afterwards).
+- Known: one Render.Vulkan test failed once in a full parallel run and never again (3 loaded
+  reruns green); capture `[FAIL]` details if it recurs.
+
+### Work streams at the usage limit (told to wrap up into a building state)
+- Flight UI port: Game.Flight project, milestones M1..M8 of flight-ui.md §7.6;
+  progress in docs/progress/flight.md.
+- Simulation phase 3 AI: progress and "Interface changes for Game" in
+  docs/progress/simulation.md.
+
+### Next
+1. Read docs/progress/flight.md and simulation.md; run the full suite; continue the flight port
+   (resume the work stream) and the AI.
+2. Cleanup: merge the duplicate ConstellationField (Screens/Rooms vs Screens/Scenes, the scenes
+   one supports larger densities) and Rooms.MedalsView vs SceneDirector.ViewMedalsAsync.
+3. Add progress/screens-rooms.md, screens-scenes.md, flight.md, rendering.md to
+   docs/progress/README.md; apply the gameflow corrections listed in screens-scenes.md.
+4. R2 wiring after the classic flight path; later R3 (glTF meshes) and R4 (ray tracing).
+
+## 2026-10-07 — Session 1 (night): Vulkan is the default renderer, title menu, screen work streams
+
+### Done
+- The user installed the Vulkan SDK 1.4.363.0 (validation layers registered with the loader).
+- Vulkan renderer (work stream, R1 core) reviewed and wired into `wc1`: `Presentation.cs` +
+  `SdlVulkanSurfaceSource.cs` in the exe; default `--renderer auto` = Vulkan with fallback to
+  SDL_Renderer (also when SDL cannot create a Vulkan window: bug found and fixed, SdlHost now
+  calls SDL_Quit when window creation fails). `--vulkan-validation`, `--window-test`.
+- Validation: new `ValidationTests` (offscreen paths on 1.3 and 1.2 with validation required,
+  fail on any validation message); the debug messenger logs loader notes about third-party
+  implicit layers (Overwolf, OBS hook on this machine) at Info. All 42 renderer tests pass under
+  validation with sync validation requested; the on-screen window test (resize, fullscreen,
+  minimise/restore, filters, vsync, aspect, 8 captures checked exactly) passes with 0 validation
+  errors/warnings, also as NativeAOT binary (2.3 MB, no ILC warnings).
+- SdlHost: `LoopHook`, `SetWindowSize`, `SetFullscreen`, `MinimizeWindow`, `RestoreWindow`, `IsMinimized`.
+- PNG writer moved to `Core.Imaging.Png` (used by wc1 window test, wc1tool, test snapshots).
+- Title menu ported (`Screens/TitleSequence`): TITLE.VGA s4 options, continue only with saves,
+  regions rewritten with frame bounds like the global, Enter/Space/S/C/click, keyboard pointer,
+  fade out. Attract part skipped (needs flight). Original quirk kept: the cursor highlight uses
+  stHostMouseState, which only warps/keyboard/joystick update (so it does not follow the mouse).
+- GameMain loop: title -> StartNewCampaign -> CampaignFlow.RunAsync with `GameFlowScreens`
+  (partial files Rooms/Scenes/Flight; unported members show "... is not ported yet").
+  Saves in the user data directory with import of GAMEDAT\SAVEGAME.WLD (ADR-011).
+- The user edited Program.cs to hard-code the GOG path; kept as the last fallback after
+  `--game`/`WC1_GAME_DIR`/current directory so `--game` works again.
+- Tests: Game 91 (intro 4, title 6, GameMain 1 new), Render.Vulkan 42, others unchanged.
+
+### Work streams running (internal ids for SendMessage)
+- Simulation: phase 2 DONE (flight model: movement, collisions, damage,
+  weapons incl. missiles/mines/turrets/flak, lock, hazards, cameras, stars, projection,
+  CaptureSpaceView snapshot; 346 tests; 22,062 lines cross-checked against the C via clang;
+  `wc1tool flight <series> <mission> [frames] [seed] [--aim]`). Findings in analysis/simulation.md
+  (the C cross-check matches only with x87-style double-precision DivideFixed, which Core
+  uses; still to confirm against the real executable; NPCs never drop mines; flak odds were
+  reversed in the old spec ...). Now running phase 3 (AI); interface changes are listed
+  under "Interface changes for Game" in progress/simulation.md.
+- Game.Flight project created (integration): `IFlightLayer` seam in Game.Flow, `Wc1Game.FlightLayer`,
+  `FlightLayer` placeholder plugged in by wc1; Game never references Simulation.
+- Flight UI analysis: writing docs/analysis/flight-ui.md.
+- Vulkan: DONE. Sync validation enabled by the renderer itself
+  (VK_EXT_layer_settings), every GPU test fails on any validation message (VulkanTestBase),
+  docs/analysis/rendering.md (R1 as built, R2-R4 design, Core contract), R2 sprite pass core
+  with synthetic data: Core.Rendering SpaceView / SpriteDrawList / SpriteImageCache /
+  SpaceViewMask / SpaceViewState (+ RenderFrame.Space), Vulkan SpritePass + atlas. 73 tests pass
+  under validation (verified in integration). Next for R2: wire into Game with the flight layer
+  (steps under "Requests" in docs/progress/rendering.md).
+- Scenes: SceneDirector conversations + briefing/debriefing/office/funeral/
+  medals/MIDGAME/endings in GameFlowScreens.Scenes.cs + Screens/Scenes/.
+- Rooms: rec room, barracks (save/load/quit), kill board, modal UI,
+  TrainSim menus in GameFlowScreens.Rooms.cs + Screens/Rooms/ + Screens/Ui/.
+- While Simulation is mid-edit, wc1tool (references Simulation) may not build; use test
+  snapshots (ScreenRig.SaveFront) instead.
+
+### Next
+1. Review work stream reports as they arrive; run all tests; look at screen PNGs.
+2. When Simulation phase 2 is done: reference it from Game, implement its interfaces (music,
+   VDU, campaign), port RunSpaceFlight + cockpit/HUD as coroutines, fill GameFlowScreens.Flight.cs
+   (incl. FlyTrainSimMissionAsync), then the attract sequence of the title.
+3. Wire R2 (sprites at output resolution) once the renderer work stream and the SpaceViewSnapshot meet.
+
+## 2026-10-07 — Session 1 (evening): Graphics + Audio wired into Game, DOS intro runs
+
+### Done
+- Game now references Graphics and Audio (Simulation still not referenced).
+- `Video/Display` owns the `GraphicsContext`; the slam flag IS `GraphicsContext.ScreenDirty`
+  (cleared after a present, like bDIBSlamPending). `ClearViewportAsync` presents when the screen
+  viewport object itself is cleared (original ClearViewport). Front buffer shares the live
+  palette, so fades are visible without re-presenting (VGA/DirectDraw semantics).
+- `Video/SoftwareCursor` (+ `ViewportPointerBounds`): ARROW.VGA cursor, hidden until a screen
+  raises the show count; SetMouseCursorShape's restore is dead code in the original (never set).
+- `Resources/GameResources` (packet + shape cache by logical file), `Audio/GameAudio`
+  (DosAudioBackend + MusicDirector + volumes, service hook on every pump, `IIntroMusic`).
+- `Wc1Game` (composition root + GameMain start-up: wc1.cfg settings, WINGCMDR.CFG + switches,
+  cinematic timing, audio, event manager + cursor, frame timer 0x78, GAME.PAL, fonts), then
+  `Screens/DosIntro` (port of sdl/dos_intro.c incl. music sync). After the intro GameMain ends
+  for now (title not ported yet).
+- `wc1`: runs Wc1Game; new `--no-audio`, `--skip-intro`, `--host-check`, `-- <original switches>`.
+  LICENSE-ymfm.txt is copied next to wc1 and wc1tool (BSD requirement from the audio port).
+- `wc1tool snap --at ms,... [--input "ms key 0x39; ms click x y"] [--audio]` runs the game
+  headless and writes PNGs (intro frames checked visually: orchestra, logo, fireworks).
+- Tests: Core 35, Graphics 153, Simulation 255, Audio 240, Game 84 (4 new intro tests:
+  unsynchronised run, rows 24..151 only, key skip, music-synchronised run ends after ~24 s).
+- The user ran wc1 in a window: picture and audio work. 60 fps with audio (measured).
+
+### Learned
+- Headless intro: 0.4 s real for 24 s virtual (with music cues), deterministic.
+- The audio work stream finished (docs/progress/audio.md): bit-exact vs C++ ymfm/originfx; Game must
+  implement IFlightMusicState/IFlightSoundWorld later; pan direction may be mirrored (check by ear).
+- Bash heredocs failed once on a C# file full of char literals; use the Write tool for such files.
+
+### Next
+1. Port Title_Sequence (nav.c:1793): the menu part first (TITLE.VGA section 4, aTitleMenuRegions,
+   UpdateTitleMenuCursor, AnySavedGames), attract part later (needs simulation + 3D).
+2. Then the GameMain loop with CampaignFlow and the first non-flight screens.
+3. Vulkan work stream and Simulation phase 2 work stream were
+   still running at the usage limit: review their progress docs and build state first.
+4. Default renderer is still SDL_Renderer; wire VulkanRenderer when its work stream reports.
+
+## 2026-10-07 — Session 1 (later): frame-driven runtime, Vulkan renderer started
+
+### Decision
+The user wants a modern, cross-platform **Vulkan renderer** now and, later, real 3D ship
+models and ray tracing. The blocking ScummVM-style model (ADR-004) is superseded by
+**ADR-009** (host-owned loop, deterministic virtual clock, game code as async coroutines) and
+**ADR-010** (Vulkan via Vortice.Vulkan + SDL3 surface, MoltenVK on macOS, layered render
+passes R1-R4, SDL_Renderer fallback). `ARCHITECTURE.md` and `PORTING-GUIDE.md` rewritten.
+
+### Done
+- Core: `Runtime/GameScheduler` (virtual clock, coroutine queue, own SynchronizationContext),
+  `Platform/IGameApp` + `IHostServices` + `HeadlessServices` (replace IGameHost/HeadlessHost),
+  `Rendering/` contracts (`IRenderer`, `RendererSettings`, `RenderFrame`/`ClassicLayer`,
+  `PresentationLayout` letterbox math shared with mouse mapping). 22 Core tests.
+- Game: `Runtime/GameRuntime` (IGameApp), `Video/Display` (working buffer, front buffer,
+  original palette semantics), EventManager waits and FrameTiming as coroutines,
+  CampaignFlow async. 80 Game tests (a whole campaign runs headless on the virtual clock).
+- Host.Sdl: `SdlHost.Run(app, renderer)` main loop, `IHostServices`, Vulkan window/surface
+  functions, `SdlRendererBackend` fallback. `wc1` runs the host check screen as a coroutine;
+  NativeAOT publish works (1.5 MB).
+- `Render.Vulkan` project skeleton (`IVulkanSurfaceSource`, Vortice.Vulkan 3.3.0) and a fourth
+  work stream building the Vulkan renderer R1 (palette shader, swapchain, filters, offscreen tests,
+  shader toolchain without SDK, SDL3 smoke sample, roadmap design doc `analysis/rendering.md`).
+- Graphics and Audio work streams were told about the frame-driven model (step-based fades, no
+  blocking calls in game-facing APIs).
+
+### Learned
+- Dev machine: NVIDIA RTX 2060 SUPER, Vulkan 1.4 loader, ray tracing capable; no Vulkan SDK
+  (no glslc, no validation layers). Installing the LunarG SDK would enable validation layers.
+- `ppy.SDL3-CS` exposes `SDL_Vulkan_GetInstanceExtensions`, `SDL_Vulkan_CreateSurface`,
+  `SDL_Vulkan_GetVkGetInstanceProcAddr`, `SDL_GetWindowSizeInPixels`, `SDL_GetWindowPixelDensity`.
+- Original present semantics: DIBslamReal presents first, then waits for the previous frame's
+  deadline; palette functions re-present the DIB (palette changes show current pixels).
+
+### Next
+1. When the Vulkan work stream reports: review, wire `VulkanRenderer` into `wc1` (adapter from
+   `SdlHost` to `IVulkanSurfaceSource`, `--renderer vulkan|sdl`, fallback on failure), make it default.
+2. When Graphics/Audio/Simulation report: add their references back to Game, implement the
+   software cursor (`ISoftwareCursor`) and port the DOS intro and the title menu as coroutines.
+3. Simulation phases 2/3 with the tick-based rule; flight loop and modal flight UI as coroutines.
+
+## 2026-10-07 — Session 1 (continued): architecture fixed, parallel porting started
+
+### Done
+- All six analyses complete in `docs/analysis/` (resources, graphics, host-input-timing,
+  audio, simulation, gameflow-screens; ~6700 lines, verified against the GOG data).
+- Architecture decided and documented (`ARCHITECTURE.md`, `DECISIONS.md` ADR-001..008):
+  layered projects Core / Graphics / Audio / Simulation / Game / Host.Sdl / wc1 / wc1tool,
+  one test project per library; ScummVM-style single-threaded host (`IGameHost`), the game
+  keeps the original blocking control flow; OPL2 = C# port of ymfm; KS gameplay numbers.
+- Core: resources (packet/LZW/install table, done), `Core.Video` (Framebuffer, 8-bit
+  Palette), `Core.Platform` (IGameHost, HostInputEvent, IAudioSource, HeadlessHost with
+  virtual clock, GameExitException), `Core.Numerics` (FixedMath FPU-exact, FixedVector,
+  CRandom = MSVC rand LCG + wrappers).
+- Host.Sdl: `SdlHost : IGameHost` (window, ARGB texture, 4:3 letterbox, scan codes + VK
+  codes, mouse mapping/warp/grab, joystick basic, SDL3 audio stream callback, SDL_DelayNS
+  sleep, message boxes, pref path). `wc1` smoke test runs (Debug and NativeAOT 1.3 MB).
+- NativeAOT publish works (see `BUILD.md` for the vswhere/PATH workaround).
+- wc1tool: command registry (partial class per subsystem): dump, hex, install.
+- Game: `Input.EventManager` (event queue/pump/keyboard/mouse/waits, faithful to the SDL
+  port), `Timing.FrameTiming` (60 Hz ticks, frame timer, throttle, game clock),
+  `Config.GameSettings` (volume/cheater file), `Config.StartupOptions` (WINGCMDR.CFG and
+  GameMain switches). 43 tests pass. Game.csproj references only Core for now.
+- Three porting work streams started in parallel (each owns its project, private
+  `--artifacts-path`, reports in `docs/progress/<x>.md`): Graphics (raster library, shapes,
+  fonts, palettes, fades, view geometry, cursor primitives, export tools), Audio (ymfm OPL2,
+  OriginFX, mixer, music/SFX managers, WAV tools), Simulation phase 1 (enums/tables,
+  vector math, object model, mission loading, mission tools).
+
+### Learned
+- The game is nested blocking loops; presents are throttled to 16 fps (cinematic) / 20 fps
+  (flight); simulation is frame-locked at 20 Hz. Fades step per vertical blank.
+- GOG WINGCMDR.CFG = `v a904 z\r\n\0`: the trailing NUL becomes an empty 4th token, which
+  the original's "count - 1" quirk drops, so v/a904/z are all applied (AdLib music, VGA).
+- Ship stats are compiled into the EXE (KS table in the reference), not in SHIPTYPE files.
+- Namespace `...Core.Math` hid `System.Math`; renamed to `Numerics` (ADR-008).
+- Shell pitfall: do not pass C#/C escapes through inline Python in bash heredocs; write
+  helper files with the Write tool instead.
+
+- Game (later the same day): campaign data model (`Campaign/`: PilotRecord, CampaignState,
+  CampaignFile = CAMP.xxx, SaveGameFile/Slot = SAVEGAME.WLD byte-exact, CampaignSession =
+  PostMission/UpdateSeries/MoveNewCampaign/deaths, TrainSimHighScores), conversation data
+  (`Scenes/`: BriefingFile, ConversationScript + all 38 branch tests, mouth/face scripts,
+  text macros, SceneAnimation = MIDGAME bytecode VM), `Flow/CampaignFlow` (GameFlow and
+  StartNewCampaign behind `IGameFlowScreens`). 79 Game tests pass; on CAMP.000 the flow
+  reproduces the Vega victory path 1-2-4-7-9-12 (18 missions) and the loss path to 13.
+- wc1tool `campaign`, `briefing`, `saves` written (`GameCommands.cs`; Tools now references
+  Game) — not yet built because the Simulation project was mid-edit.
+
+### Next
+1. Integrate work stream results as they finish (review progress docs, run all tests, fix gaps);
+   build wc1tool and try the new game commands.
+2. Game: add Graphics/Audio/Simulation references back; `Display/` (DIBslam/DIBslamReal,
+   palette writes, software cursor via Graphics primitives, adapter Viewport -> IPointerBounds);
+   then the first visible screens (DOS intro, title menu) and `GameMain`.
+3. Simulation phase 2 (physics/weapons/damage) and phase 3 (AI) — resume the simulation work stream.
+4. Screens (rec room, barracks, briefing/debriefing presenters, scramble/landing, endings),
+   possibly by an work stream owning `Game/Screens`.
+5. Flight: 3D projection/draw list, cockpit, HUD, nav map, RunSpaceFlight.
+
+## 2026-10-07 — Session 1: bootstrap
+
+- Cloned the reference, verified the GOG install is the DOS release, created the solution,
+  chose SDL3 via `ppy.SDL3-CS`, wrote the docs skeleton, ported the resource layer and the
+  first host, started the six analyses.
