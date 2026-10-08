@@ -1,8 +1,14 @@
 WC1 Reflight - third-party notices
 
+WC1 Reflight is licensed under the GNU General Public License, version 3 (see LICENSE in
+the source repository, https://github.com/3HMonkey/wc1-reflight). It is a translation of the
+reconstructed source of Wing Commander by neuromancer/wc1-re
+(https://github.com/neuromancer/wc1-re), also licensed under the GPL, version 3.
+
 WC1 Reflight contains or is built with the following third-party works. Their licences
 are reproduced below in full. The fonts are compiled into the executable; the source
-files are in assets/fonts/ of the source repository.
+files are in assets/fonts/ of the source repository. SDL3 (zlib licence) and
+Vortice.Vulkan (MIT licence) are used as NuGet packages.
 
 ==============================================================================
 ymfm (OPL2 emulator, ported to C# in src/WingCommander.Audio/Opl)

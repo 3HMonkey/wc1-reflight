@@ -109,6 +109,18 @@ code and the porting notes.
 - Joystick and gamepad support
 - 3D ship models (glTF, PBR) and ray-traced effects on capable GPUs
 
+## License
+
+WC1 Reflight is free software under the [GNU General Public License v3.0](LICENSE). It is a
+translation of the reconstructed source of [neuromancer/wc1-re](https://github.com/neuromancer/wc1-re),
+which is GPL-3.0 as well. Bundled third-party components keep their own licences, all
+GPL-compatible and reproduced in [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt): ymfm
+(BSD-3-Clause), Tektur and CHAWP (SIL Open Font License 1.1), SPACE WING LEADER (CC BY 3.0);
+SDL3 (zlib) and Vortice.Vulkan (MIT) come as NuGet packages.
+
+*Wing Commander* and its game data are copyright Electronic Arts. They are not part of this
+project and not covered by its licence.
+
 ## Credits
 
 - [neuromancer/wc1-re](https://github.com/neuromancer/wc1-re): the reverse-engineered C source

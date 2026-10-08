@@ -156,6 +156,14 @@ Accepted 2026-10-07 (open questions of `analysis/flight-ui.md` §8.2).
   cinematic is UI; every missing presentation effect (warp flash, phase-3 cockpit messages) is
   an `ISimulationEvents` member.
 
+## ADR-014: Licence GPL-3.0
+Accepted 2026-10-08. The port translates the reconstructed C source of neuromancer/wc1-re
+(GPL-3.0): function structure, names, tables and constants. It is a derivative work and is
+therefore licensed under the GPL-3.0 (`LICENSE`). Bundled third-party parts keep their
+GPL-compatible licences (`THIRD-PARTY-NOTICES.txt`): ymfm BSD-3-Clause, Tektur and CHAWP OFL 1.1,
+SPACE WING LEADER CC BY 3.0; NuGet packages SDL3 (zlib) and Vortice.Vulkan (MIT). Game data is not
+part of the project.
+
 ## ADR-013: Text at output resolution, replacement fonts, key help, config.json
 Accepted 2026-10-08 (user requests: "sharpen all lettering", "show the key bindings in the
 cockpit", replacement fonts, game path in `config.json`).
