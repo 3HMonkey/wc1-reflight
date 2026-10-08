@@ -325,6 +325,100 @@ public class SpaceSpriteTests
     }
 
     [DataFact]
+    public void Sprites_carry_their_state_of_the_tick_before()
+    {
+        var rig = new FlightRig(41, R2Options);
+        var before = new List<SpriteInstance>();
+        var after = new List<SpriteInstance>();
+        rig.Start(async r =>
+        {
+            r.StopAfter(30, (session, count) =>
+            {
+                if (count is 29 or 30)
+                    (count == 29 ? before : after).AddRange(session.PublishedSpaceFrame!.View.Sprites.Items.ToArray());
+            });
+            await r.Layer.FlyMissionAsync(1, 0);
+        });
+        rig.Run();
+
+        int paired = 0;
+        var seen = new Dictionary<short, int>();
+        foreach (var sprite in after)
+        {
+            int occurrence = seen.TryGetValue(sprite.ObjectSlot, out int n) ? n : 0;
+            seen[sprite.ObjectSlot] = occurrence + 1;
+            if (!sprite.HasPrevious)
+                continue;
+            paired++;
+            var partner = before.Where(s => s.ObjectSlot == sprite.ObjectSlot).ElementAt(occurrence);
+            Assert.Equal(partner.X, sprite.PreviousX);
+            Assert.Equal(partner.Y, sprite.PreviousY);
+            Assert.Equal(partner.Scale, sprite.PreviousScale);
+            Assert.Equal(partner.Angle, sprite.PreviousAngle);
+        }
+        Assert.True(paired > after.Count / 2, $"{paired} of {after.Count} sprites paired");
+    }
+
+    [DataFact]
+    public void Target_brackets_are_sprites_tied_to_the_target_and_compose_like_the_cpu()
+    {
+        // Frames 10-12 put the wingman in front of the player and make it the target (the same in
+        // both runs); the first frame that shows brackets is checked.
+        static void TargetTheWingman(FlightSession session, int count)
+        {
+            var sim = session.Sim;
+            if (count is < 10 or > 12 || sim.YourWingman == -1)
+                return;
+            int wingman = sim.YourWingman;
+            sim.Objects[wingman].Position = sim.Objects[ObjectSlots.Player].PositionRelativeIjk(0, 0, 1500);
+            sim.Ships[ObjectSlots.Player].Target = (sbyte)wingman;
+        }
+
+        int found = -1, target = -1;
+        SpriteInstance[] lines = [];
+        byte[] composed = [];
+        var r2 = new FlightRig(13, R2Options);
+        r2.Start(async r =>
+        {
+            r.StopAfter(120, (session, count) =>
+            {
+                TargetTheWingman(session, count);
+                if (found >= 0 || count < 12 || session.PublishedSpaceFrame is not { } published)
+                    return;
+                var strokes = published.View.Sprites.Items.ToArray().Where(sprite => sprite.Image.LogicalFile == FlightSession.SolidPixelFile).ToArray();
+                if (strokes.Length == 0)
+                    return;
+                found = count;
+                lines = strokes;
+                target = session.Sim.Ships[ObjectSlots.Player].Target;
+                composed = (byte[])r.Game.Display.Working.Pixels.Clone();
+                session.ComposeSpaceSprites(published, composed);
+            });
+            await r.Layer.FlyMissionAsync(1, 0);
+        });
+        r2.Run();
+        Assert.True(found >= 0, "no brackets in 120 frames");
+        Assert.All(lines, line => Assert.Equal(target, line.ObjectSlot));
+        Assert.All(lines, line => Assert.True(line.Scale == 1f || line.ScaleY == 1f)); // horizontal or vertical strokes
+
+        // The same frame drawn by the CPU alone: the composed bracket sprites give exactly its pixels.
+        byte[] classic = [];
+        var cpu = new FlightRig(13);
+        cpu.Start(async r =>
+        {
+            r.StopAfter(found, (session, count) =>
+            {
+                TargetTheWingman(session, count);
+                if (count == found)
+                    classic = (byte[])r.Game.Display.Working.Pixels.Clone();
+            });
+            await r.Layer.FlyMissionAsync(1, 0);
+        });
+        cpu.Run();
+        Assert.Equal(classic, composed);
+    }
+
+    [DataFact]
     public void Attract_mode_and_canned_scenes_publish_their_sprites()
     {
         var rig = new FlightRig(29, R2Options);

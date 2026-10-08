@@ -43,6 +43,7 @@ public sealed partial class SpaceSimulation
                 continue;
             ref var view = ref snapshot.Objects[count++];
             view.Slot = obj;
+            view.SpawnId = o.SpawnId;
             view.Type = o.Type;
             view.Class = o.Class;
             view.Owner = o.Owner;

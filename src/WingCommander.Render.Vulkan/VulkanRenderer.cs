@@ -421,7 +421,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         {
             _sprites ??= new SpritePass(_gpu, _classic, _log, FramesInFlight);
             _sprites.EnsurePipeline(format);
-            spriteCount = _sprites.Prepare(cmd, slot.Index, space, rect, Settings.Filter, encodeLinear, Statistics);
+            spriteCount = _sprites.Prepare(cmd, slot.Index, space, rect, Settings.Filter, encodeLinear, Statistics, frame.Interpolation);
         }
 
         bool text = false;

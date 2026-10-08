@@ -24,6 +24,12 @@ public sealed partial class SpaceSimulation
         return -1;
     }
 
+    /// <summary>The last <see cref="SpaceObject.SpawnId"/> handed out (port addition).</summary>
+    private int _lastSpawnId;
+
+    /// <summary>Gives the object in <paramref name="obj"/> a new <see cref="SpaceObject.SpawnId"/> (port addition, R2b).</summary>
+    private void MarkSpawned(short obj) => Objects[obj].SpawnId = ++_lastSpawnId;
+
     /// <summary>First free effect slot 10..60, marked not visible; -1 when full.</summary>
     /// <remarks>C: find_vacant_3d_object (0x419BA0, geom.c).</remarks>
     public short FindVacant3dObject()
@@ -33,6 +39,7 @@ public sealed partial class SpaceSimulation
             if (Objects[i].Class == ObjectClass.Null)
             {
                 Objects[i].ScreenX = ObjectSlots.NotVisible;
+                MarkSpawned(i); // port addition (some debris skips set_objects_data)
                 return i;
             }
         }
@@ -95,6 +102,7 @@ public sealed partial class SpaceSimulation
     /// <remarks>C: set_objects_data (0x41E120, disk.c).</remarks>
     public void SetObjectsData(short obj, ObjectType type, short owner)
     {
+        MarkSpawned(obj); // port addition
         ref var o = ref Objects[obj];
         if (type == ObjectType.SpaceDust)
         {

@@ -89,6 +89,7 @@ public sealed class GameRuntime : IGameApp
         if (elapsed > MaxStep)
             elapsed = MaxStep;
         Scheduler.Advance(elapsed.TotalMilliseconds);
+        Frame.Interpolation = Frame.Space?.InterpolationAt(Scheduler.Now) ?? 1f;
         AfterUpdate?.Invoke();
     }
 

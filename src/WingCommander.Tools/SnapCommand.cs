@@ -21,7 +21,9 @@ internal static partial class Commands
     /// writes the displayed frame as PNG at each requested time. Deterministic, so it doubles as
     /// a regression tool for screens. <c>--hd WxH</c> adds the CPU reference of the
     /// output-resolution text; <c>--gpu WxH</c> renders each frame with the Vulkan renderer
-    /// offscreen (sprite space view, text and key help, like the window).
+    /// offscreen (sprite space view, text and key help, like the window). The space view shows the
+    /// latest simulation tick; with <c>--interpolate</c> it shows what the window shows at that
+    /// moment, between the last two ticks (R2b).
     /// </summary>
     private static int SnapCommand(ToolOptions o)
     {
@@ -90,6 +92,8 @@ internal static partial class Commands
                 Console.Error.WriteLine(failure);
                 return 1;
             }
+            if (o.Has("interpolate"))
+                runtime.Frame.Interpolation = runtime.Frame.Space?.InterpolationAt(at) ?? 1f;
             var layer = runtime.Frame.Classic;
             string path = Path.Combine(outDir, string.Create(CultureInfo.InvariantCulture, $"snap_{at:000000}.png"));
             Png.WriteIndexed(path, 320, 200, layer.Pixels.Pixels, layer.Palette.Rgb);

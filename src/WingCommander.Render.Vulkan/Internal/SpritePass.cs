@@ -134,8 +134,9 @@ internal sealed unsafe class SpritePass : IDisposable
     /// through the slot's staging buffer), uploads a changed window mask and writes the instance
     /// records. Returns the number of sprites to draw.
     /// </summary>
+    /// <param name="interpolation">Where the display is between the previous and the latest tick (R2b, <see cref="RenderFrame.Interpolation"/>).</param>
     public int Prepare(VkCommandBuffer cmd, int slotIndex, SpaceView space, PresentationRect rect, ScalingFilter filter,
-        bool encodeLinear, VulkanRendererStatistics statistics)
+        bool encodeLinear, VulkanRendererStatistics statistics, float interpolation = 1f)
     {
         ref Slot slot = ref _slots[slotIndex];
         slot.DrawCount = 0;
@@ -201,7 +202,8 @@ internal sealed unsafe class SpritePass : IDisposable
                     entry = new AtlasEntry(x, y, image.Width, image.Height, image.OriginX, image.OriginY);
                     _atlasPacker.Add(sprite.Image, entry);
                 }
-                WriteInstance(instances + instanceCount, in sprite, in entry, outputScale);
+                SpriteInstance shown = sprite.At(interpolation);
+                WriteInstance(instances + instanceCount, in shown, in entry, outputScale);
                 instanceCount++;
             }
             if (!full)
@@ -317,8 +319,9 @@ internal sealed unsafe class SpritePass : IDisposable
     {
         var (cos, sin) = SpriteTrig.Get(sprite.Angle);
         float scale = sprite.Scale;
+        float scaleY = sprite.VerticalScale;
         float flipX = (sprite.Flip & SpriteFlip.Horizontal) != 0 ? -scale : scale;
-        float flipY = (sprite.Flip & SpriteFlip.Vertical) != 0 ? -scale : scale;
+        float flipY = (sprite.Flip & SpriteFlip.Vertical) != 0 ? -scaleY : scaleY;
         // Screen = hot-spot centre + R(angle) * diag(flipX, flipY) * local (y down: clockwise).
         data->PositionX = sprite.X;
         data->PositionY = sprite.Y;
@@ -332,7 +335,7 @@ internal sealed unsafe class SpritePass : IDisposable
         data->Height = entry.Height;
         data->AtlasX = entry.X;
         data->AtlasY = entry.Y;
-        data->Magnification = outputScale * MathF.Abs(scale);
+        data->Magnification = outputScale * MathF.Min(MathF.Abs(scale), MathF.Abs(scaleY));
         data->Unused0 = 0f;
         data->Unused1 = 0f;
         data->Unused2 = 0f;

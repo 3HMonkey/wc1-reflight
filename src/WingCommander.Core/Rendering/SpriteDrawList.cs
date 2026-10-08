@@ -49,10 +49,53 @@ public struct SpriteInstance
     /// <summary>Magnification, 1 = 0x100 (<c>asObjectScreenScale / 256</c>).</summary>
     public float Scale;
 
+    /// <summary>Vertical magnification when it differs from <see cref="Scale"/> (HUD lines are a stretched pixel); 0 = <see cref="Scale"/>.</summary>
+    public float ScaleY;
+
     public SpriteFlip Flip;
 
-    /// <summary>Simulation slot the sprite shows, or -1 (effects, HUD-less extras). Used by R3 to swap in meshes.</summary>
+    /// <summary>Simulation slot the sprite shows, or -1 (effects, HUD-less extras). Pairs the sprites of consecutive ticks (R2b); R3 swaps in meshes.</summary>
     public short ObjectSlot;
+
+    /// <summary>
+    /// Set when the sprite showed the same thing one simulation tick earlier (R2b): renderers draw
+    /// it in between the two (<see cref="At"/>), so motion is smooth at any display rate.
+    /// </summary>
+    public bool HasPrevious;
+
+    public float PreviousX;
+
+    public float PreviousY;
+
+    public float PreviousAngle;
+
+    public float PreviousScale;
+
+    public float PreviousScaleY;
+
+    /// <summary>The vertical magnification in effect.</summary>
+    public readonly float VerticalScale => ScaleY != 0f ? ScaleY : Scale;
+
+    /// <summary>
+    /// The sprite at <paramref name="t"/> between the previous tick (0) and this one (1, or without
+    /// a previous state): position and scale move linearly, the angle turns the short way; the
+    /// image is this tick's.
+    /// </summary>
+    public readonly SpriteInstance At(float t)
+    {
+        if (!HasPrevious || t >= 1f)
+            return this;
+        t = MathF.Max(t, 0f);
+        SpriteInstance sprite = this;
+        sprite.X = PreviousX + (X - PreviousX) * t;
+        sprite.Y = PreviousY + (Y - PreviousY) * t;
+        sprite.Scale = PreviousScale + (Scale - PreviousScale) * t;
+        if (ScaleY != 0f)
+            sprite.ScaleY = PreviousScaleY + (ScaleY - PreviousScaleY) * t;
+        float turn = ((Angle - PreviousAngle) % 360f + 540f) % 360f - 180f;
+        sprite.Angle = PreviousAngle + turn * t;
+        return sprite;
+    }
 }
 
 /// <summary>
@@ -73,6 +116,16 @@ public sealed class SpriteDrawList
     public int Count { get; private set; }
 
     public ReadOnlySpan<SpriteInstance> Items => _items.AsSpan(0, Count);
+
+    /// <summary>The sprite at <paramref name="index"/>, for changes after it was added.</summary>
+    public ref SpriteInstance this[int index]
+    {
+        get
+        {
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)index, (uint)Count, nameof(index));
+            return ref _items[index];
+        }
+    }
 
     /// <summary>
     /// Screen rectangle sprites are clipped to: the space buffer's area on the screen (view

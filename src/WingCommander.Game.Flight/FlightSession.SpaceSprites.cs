@@ -19,6 +19,9 @@ namespace WingCommander.Game.Flight;
 // is not drawn by the CPU; the classic frame keeps the space colour there, and the renderer
 // replaces exactly those pixels inside the window mask. Without an R2 renderer (or with
 // FlightOptions.SpriteSpaceView off) nothing is recorded and the CPU draws everything.
+// R2b (ADR-019): every sprite also carries its state of the tick before (paired by object slot),
+// and the target brackets and the lock spiral are sprites tied to their object, so the renderer
+// can draw the space view smoothly between the 20 Hz ticks.
 internal sealed partial class FlightSession
 {
     private enum SpaceSpriteState
@@ -85,6 +88,21 @@ internal sealed partial class FlightSession
     private bool _windowMaskFull;
     private bool _windowMaskValid;
 
+    /// <summary>Logical file of the synthetic one-pixel images HUD lines are drawn with (frame = palette index).</summary>
+    internal const int SolidPixelFile = -1;
+
+    /// <summary>Farther than this (logical pixels) from its sprite of the tick before, a sprite is not interpolated (cuts, reused slots).</summary>
+    private const float MaxPairJump = 64f;
+
+    /// <summary>Pair keys: slot * stride + occurrence of the slot in the frame.</summary>
+    private const int PairKeyStride = 64;
+
+    /// <summary>The frame of the tick before, when the frame being recorded can be interpolated from it (R2b).</summary>
+    private SpaceSpriteFrame? _pairWith;
+
+    private readonly Dictionary<int, int> _previousSprites = [];
+    private readonly Dictionary<int, int> _occurrences = [];
+
     /// <summary>The simulation's view of the last recorded tick, and its renderer copy (the next frame's Previous).</summary>
     private readonly SpaceViewSnapshot _spaceSnapshot = new();
     private readonly SpaceViewState _lastSpaceState = new();
@@ -135,6 +153,172 @@ internal sealed partial class FlightSession
         frame.View.Sprites.Clip = new ScreenRect(buffer.Left + frame.OffsetX, buffer.Top + frame.OffsetY,
             frame.BufferWidth, frame.BufferHeight);
         CaptureSpaceViewState(frame);
+        PreparePairing(frame);
+    }
+
+    /// <summary>
+    /// Indexes the sprites of the shown frame by object slot and occurrence, when it shows the tick
+    /// right before this one from the same camera (same view, no cut): the new sprites take their
+    /// previous state from it (R2b).
+    /// </summary>
+    private void PreparePairing(SpaceSpriteFrame frame)
+    {
+        _pairWith = null;
+        _previousSprites.Clear();
+        _occurrences.Clear();
+        if (_publishedSpaceFrame is not { } previous || ReferenceEquals(previous, frame) || !Continues(previous, frame))
+            return;
+        _pairWith = previous;
+        var sprites = previous.View.Sprites.Items;
+        for (int i = 0; i < sprites.Length; i++)
+        {
+            short slot = sprites[i].ObjectSlot;
+            if (slot < 0)
+                continue;
+            int occurrence = _occurrences.TryGetValue(slot, out int seen) ? seen : 0;
+            _occurrences[slot] = occurrence + 1;
+            if (occurrence < PairKeyStride)
+                _previousSprites[slot * PairKeyStride + occurrence] = i;
+        }
+        _occurrences.Clear();
+    }
+
+    /// <summary>True when <paramref name="frame"/> follows <paramref name="previous"/> within a few ticks through the same camera.</summary>
+    private static bool Continues(SpaceSpriteFrame previous, SpaceSpriteFrame frame)
+    {
+        SpaceViewState before = previous.Current, now = frame.Current;
+        int ticks = unchecked((short)(now.SpaceFrame - before.SpaceFrame));
+        if (ticks is <= 0 or > 4 || before.CameraViewMode != now.CameraViewMode)
+            return false;
+        if (previous.OffsetX != frame.OffsetX || previous.OffsetY != frame.OffsetY ||
+            previous.BufferWidth != frame.BufferWidth || previous.BufferHeight != frame.BufferHeight)
+            return false;
+        var a = before.Camera.Forward;
+        var b = now.Camera.Forward;
+        float lengths = a.Length() * b.Length();
+        return lengths > 0f && System.Numerics.Vector3.Dot(a, b) / lengths > 0.9f;
+    }
+
+    /// <summary>Gives a new sprite the state of its partner in the tick before (same slot, same occurrence, same object, no jump).</summary>
+    private void PairWithPreviousTick(ref SpriteInstance sprite, int slot)
+    {
+        if (_pairWith is not { } previous || slot < 0)
+            return;
+        int occurrence = _occurrences.TryGetValue(slot, out int seen) ? seen : 0;
+        _occurrences[slot] = occurrence + 1;
+        if (!_previousSprites.TryGetValue(slot * PairKeyStride + occurrence, out int index))
+            return;
+        ref readonly var before = ref previous.View.Sprites.Items[index];
+        bool line = sprite.Image.LogicalFile == SolidPixelFile;
+        if (line != (before.Image.LogicalFile == SolidPixelFile))
+            return;
+        if (line && (sprite.Scale >= sprite.ScaleY) != (before.Scale >= before.ScaleY))
+            return; // a horizontal line never turns into a vertical one
+        if (MathF.Abs(before.X - sprite.X) > MaxPairJump || MathF.Abs(before.Y - sprite.Y) > MaxPairJump)
+            return;
+        if (!SameObject(previous.Current, _pendingSpaceFrame!.Current, slot))
+            return;
+        sprite.HasPrevious = true;
+        sprite.PreviousX = before.X;
+        sprite.PreviousY = before.Y;
+        sprite.PreviousAngle = before.Angle;
+        sprite.PreviousScale = before.Scale;
+        sprite.PreviousScaleY = before.ScaleY;
+    }
+
+    /// <summary>The slot holds the same object in both ticks: the same spawn (slots are reused when objects die), still of the same kind.</summary>
+    private static bool SameObject(SpaceViewState before, SpaceViewState now, int slot)
+    {
+        int i = before.IndexOfSlot((short)slot), j = now.IndexOfSlot((short)slot);
+        if (i < 0 || j < 0)
+            return false;
+        ref readonly var a = ref before.Objects[i];
+        ref readonly var b = ref now.Objects[j];
+        return a.SpawnId == b.SpawnId && a.Type == b.Type && a.Class == b.Class;
+    }
+
+    /// <summary>
+    /// Engine flames and turrets are new objects every tick, placed relative to their parent
+    /// (C: reposition_fixed_child_objects), so they never pair with the tick before: they take the
+    /// motion of their parent's sprite instead, turned and scaled with it (R2b).
+    /// </summary>
+    private static void AttachFixedChildren(SpaceSpriteFrame frame)
+    {
+        SpaceViewState state = frame.Current;
+        SpriteDrawList sprites = frame.View.Sprites;
+        for (int i = 0; i < sprites.Count; i++)
+        {
+            ref SpriteInstance child = ref sprites[i];
+            if (child.HasPrevious || child.ObjectSlot < 0)
+                continue;
+            int index = state.IndexOfSlot(child.ObjectSlot);
+            if (index < 0 || state.Objects[index].Class != (short)ObjectClass.FixedObject)
+                continue;
+            int parentIndex = FirstSpriteOf(sprites, state.Objects[index].Owner);
+            if (parentIndex < 0)
+                continue;
+            ref readonly SpriteInstance parent = ref sprites[parentIndex];
+            if (!parent.HasPrevious || parent.Scale == 0f)
+                continue;
+            float turn = ((parent.PreviousAngle - parent.Angle) % 360f + 540f) % 360f - 180f;
+            float ratio = parent.PreviousScale / parent.Scale;
+            var (sin, cos) = MathF.SinCos(turn * (MathF.PI / 180f));
+            float dx = child.X - parent.X, dy = child.Y - parent.Y;
+            child.HasPrevious = true;
+            child.PreviousX = parent.PreviousX + ratio * (dx * cos - dy * sin);
+            child.PreviousY = parent.PreviousY + ratio * (dx * sin + dy * cos);
+            child.PreviousAngle = child.Angle + turn;
+            child.PreviousScale = child.Scale * ratio;
+            child.PreviousScaleY = child.ScaleY * ratio;
+        }
+    }
+
+    /// <summary>Index of the first sprite of <paramref name="slot"/> (an object's own sprite comes before its HUD marks), or -1.</summary>
+    private static int FirstSpriteOf(SpriteDrawList sprites, int slot)
+    {
+        if (slot < 0)
+            return -1;
+        var items = sprites.Items;
+        for (int i = 0; i < items.Length; i++)
+        {
+            if (items[i].ObjectSlot == slot)
+                return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Records a HUD line (one pixel wide, horizontal or vertical, space-buffer coordinates) as a
+    /// stretched one-pixel sprite tied to <paramref name="slot"/>, so it moves with its object
+    /// between ticks (R2b); false means the CPU draws it.
+    /// </summary>
+    private bool TryRecordLineSprite(int x0, int y0, int x1, int y1, byte colour, int slot)
+    {
+        if (_spaceSpriteState != SpaceSpriteState.Recording || _softwareForRestOfFrame || (x0 != x1 && y0 != y1))
+            return false;
+        int left = Math.Min(x0, x1), right = Math.Max(x0, x1);
+        int top = Math.Min(y0, y1), bottom = Math.Max(y0, y1);
+        var recorded = _pendingSpaceFrame!;
+        ref var sprite = ref recorded.View.Sprites.Add();
+        sprite.Image = SolidPixel(colour);
+        // A one-pixel image scales around its pixel's centre: the stretched pixel covers left..right, top..bottom.
+        sprite.X = (left + right) * 0.5f + recorded.OffsetX;
+        sprite.Y = (top + bottom) * 0.5f + recorded.OffsetY;
+        sprite.Scale = right - left + 1;
+        sprite.ScaleY = bottom - top + 1;
+        sprite.ObjectSlot = (short)slot;
+        PairWithPreviousTick(ref sprite, slot);
+        recorded.BufferPositions.Add((unchecked((short)left), unchecked((short)top)));
+        return true;
+    }
+
+    /// <summary>The one-pixel image of a palette colour (created on first use).</summary>
+    private SpriteImageKey SolidPixel(byte colour)
+    {
+        var key = SpriteImageKey.Create(SolidPixelFile, 0, colour);
+        if (!_spriteImages.Contains(key))
+            _spriteImages.Set(key, new SpriteImage(1, 1, 0, 0, new[] { colour }));
+        return key;
     }
 
     /// <summary>
@@ -172,6 +356,7 @@ internal sealed partial class FlightSession
         {
             ref var s = ref state.Add();
             s.Slot = o.Slot;
+            s.SpawnId = o.SpawnId;
             s.Type = (short)o.Type;
             s.Class = (short)o.Class;
             s.Owner = o.Owner;
@@ -279,6 +464,7 @@ internal sealed partial class FlightSession
         sprite.Scale = scale / 256f;
         sprite.Flip = (SpriteFlip)flip;
         sprite.ObjectSlot = (short)slot;
+        PairWithPreviousTick(ref sprite, slot);
         recorded.BufferPositions.Add((unchecked((short)x), unchecked((short)y)));
         return true;
     }
@@ -356,8 +542,12 @@ internal sealed partial class FlightSession
         if (_spaceSpriteState == SpaceSpriteState.Complete && _pendingSpaceFrame is { } pending)
         {
             (_pendingSpaceFrame, _publishedSpaceFrame) = (_publishedSpaceFrame, pending);
+            AttachFixedChildren(pending);
             UpdateWindowMask(pending.MaskGeometry, pending.MaskFull);
             working.AsSpan().CopyTo(_publishedBase);
+            // R2b: the renderer moves from the tick before to this one over one frame interval.
+            pending.View.PresentedAt = Game.Runtime.Scheduler.Now;
+            pending.View.TickMilliseconds = Game.Timing.FrameIntervalMs;
             renderFrame.Space = pending.View;
             _spaceSpriteState = SpaceSpriteState.Idle;
             PublishedSpaceFrames++;
@@ -427,8 +617,16 @@ internal sealed partial class FlightSession
         for (int i = 0; i < sprites.Length; i++)
         {
             ref readonly var sprite = ref sprites[i];
-            var shape = Shapes.Get(sprite.Image.LogicalFile, sprite.Image.Section);
             var (x, y) = frame.BufferPositions[i];
+            if (sprite.Image.LogicalFile == SolidPixelFile)
+            {
+                int right = x + (int)MathF.Round(sprite.Scale) - 1, bottom = y + (int)MathF.Round(sprite.VerticalScale) - 1;
+                byte colour = (byte)sprite.Image.Frame;
+                Gfx.DrawFilledViewportRect(low, x, y, right, bottom, colour);
+                Gfx.DrawFilledViewportRect(high, x, y, right, bottom, colour);
+                continue;
+            }
+            var shape = Shapes.Get(sprite.Image.LogicalFile, sprite.Image.Section);
             int scale = (int)MathF.Round(sprite.Scale * 256f);
             Gfx.DrawSpriteScaled(low, x, y, shape, sprite.Image.Frame, (int)sprite.Angle, scale, (int)sprite.Flip);
             Gfx.DrawSpriteScaled(high, x, y, shape, sprite.Image.Frame, (int)sprite.Angle, scale, (int)sprite.Flip);

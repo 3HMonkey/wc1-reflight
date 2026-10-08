@@ -50,8 +50,12 @@ public sealed class RenderFrame
 
     public ClassicLayer Classic { get; }
 
-    /// <summary>Position between the previous and the latest simulation tick, 0..1 (for interpolation).</summary>
-    public float Interpolation { get; set; }
+    /// <summary>
+    /// Position between the previous and the latest simulation tick, 0..1, for sprites that carry
+    /// their previous state (R2b): 1 shows the latest tick exactly (the default, headless runs);
+    /// the host loop moves it on between ticks.
+    /// </summary>
+    public float Interpolation { get; set; } = 1f;
 
     /// <summary>
     /// The space window drawn at output resolution underneath the classic layer's cockpit and HUD

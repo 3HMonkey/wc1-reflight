@@ -11,7 +11,7 @@ internal static partial class Commands
         Register("campaign", "[0|1|2]  series tree, thresholds, branches and medal rows of CAMP.00x", CampaignCommand);
         Register("briefing", "<series> <mission> [--campaign N] [--part briefing|debriefing|rec0|rec1|rec2]  conversation script", BriefingCommand);
         Register("saves", "list the SAVEGAME.WLD bunks", SavesCommand);
-        Register("snap", "--at ms[,ms...] [--input \"ms key|up|click a b; ...\"] [--audio] [--skip-intro] [--args \"p ...\"] [--hd WxH] [--gpu WxH [--filter f] [--square-pixels] [--integer]] [--original-fonts] [--classic-text] [--classic-space] [--out dir]  run the game headless, save PNGs (CPU text reference with --hd, Vulkan offscreen with --gpu)", SnapCommand);
+        Register("snap", "--at ms[,ms...] [--input \"ms key|up|click a b; ...\"] [--audio] [--skip-intro] [--args \"p ...\"] [--hd WxH] [--gpu WxH [--filter f] [--square-pixels] [--integer] [--interpolate]] [--original-fonts] [--classic-text] [--classic-space] [--out dir]  run the game headless, save PNGs (CPU text reference with --hd, Vulkan offscreen with --gpu)", SnapCommand);
     }
 
     private static readonly string[] ShipNames = ["Hornet", "Rapier", "Scimitar", "Raptor"];

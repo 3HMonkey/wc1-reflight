@@ -37,8 +37,11 @@ public struct SpaceCamera
 /// </summary>
 public struct SpaceObjectState
 {
-    /// <summary>Simulation slot 0..60: pairs the objects of two consecutive ticks.</summary>
+    /// <summary>Simulation slot 0..60; with <see cref="SpawnId"/> it pairs the objects of two consecutive ticks.</summary>
     public short Slot;
+
+    /// <summary>Changes whenever the slot is given to a new object (slots are reused when objects die).</summary>
+    public int SpawnId;
 
     /// <summary>ObjectType number (ship type, missile, effect ...).</summary>
     public short Type;

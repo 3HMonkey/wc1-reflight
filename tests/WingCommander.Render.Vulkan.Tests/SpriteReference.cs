@@ -94,13 +94,14 @@ public static class SpriteReference
             return colour;
 
         bool ambiguous = false;
-        foreach (ref readonly SpriteInstance sprite in space.Sprites.Items)
+        foreach (ref readonly SpriteInstance recorded in space.Sprites.Items)
         {
-            if (!space.Images.TryGet(sprite.Image, out SpriteImage? image) || image.IsEmpty)
+            if (!space.Images.TryGet(recorded.Image, out SpriteImage? image) || image.IsEmpty)
                 continue;
+            SpriteInstance sprite = recorded.At(scene.Frame.Interpolation); // between the ticks (R2b)
             var (cos, sin) = SpriteTrig.Get(sprite.Angle);
             double fx = (sprite.Flip & SpriteFlip.Horizontal) != 0 ? -sprite.Scale : sprite.Scale;
-            double fy = (sprite.Flip & SpriteFlip.Vertical) != 0 ? -sprite.Scale : sprite.Scale;
+            double fy = (sprite.Flip & SpriteFlip.Vertical) != 0 ? -sprite.VerticalScale : sprite.VerticalScale;
             // Columns of M: image x axis (cos fx, sin fx), image y axis (-sin fy, cos fy).
             double a = cos * fx, c = sin * fx, b = -sin * fy, d = cos * fy;
             double det = a * d - b * c;

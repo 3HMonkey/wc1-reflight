@@ -708,6 +708,7 @@ public sealed partial class SpaceSimulation
             else
             {
                 Objects[obj].Class = ObjectClass.Star;
+                MarkSpawned(obj); // port addition
                 StarFieldIRotation = Random.Signed(45);
                 StarFieldJRotation = Random.Signed(45);
                 CopyFrame(ObjectSlots.Eye, ObjectSlots.Scratch);
@@ -775,6 +776,7 @@ public sealed partial class SpaceSimulation
                 VectorMath.RotateAboutJ(StarFieldJRotation, ref scratch.Right, ref scratch.Forward);
                 o.Position = VectorMath.Scale(scratch.Forward, 15000 << 8);
                 o.ViewFrame = (short)(Random.InRange(0, 5) + 32);
+                MarkSpawned(obj); // port addition: a new star
                 break;
             }
 

@@ -121,7 +121,8 @@ real 3D models and ray tracing).
   test and NativeAOT publish all pass with validation (0 errors, 0 warnings).
 - Status 2026-10-08: R2 is live: the flight layer records space sprites (Core.Rendering
   SpaceView) and the Vulkan sprite pass draws them at output resolution under the classic
-  cockpit/HUD; `--classic-space` keeps the CPU path. R2b (interpolation), R3 and R4 are next.
+  cockpit/HUD; `--classic-space` keeps the CPU path. R2b (interpolation) is live as well
+  (ADR-019); R3 and R4 are next.
 
 ## ADR-011: Saves and settings live in the user data directory
 Accepted 2026-10-07.
@@ -158,6 +159,23 @@ Accepted 2026-10-07 (open questions of `analysis/flight-ui.md` §8.2).
   simulation at the original statement positions; the autopilot computation is simulation, its
   cinematic is UI; every missing presentation effect (warp flash, phase-3 cockpit messages) is
   an `ISimulationEvents` member.
+
+## ADR-019: Smooth flight between the 20 Hz ticks (R2b)
+Accepted 2026-10-08 (user request: "smooth flights"). The simulation stays at 20 Hz; with the
+sprite renderer the space view moves at the display's refresh rate. Every space sprite carries
+the state of its partner one tick earlier (same object slot, same object), and the renderer
+draws it between the two ticks (`SpriteInstance.At(RenderFrame.Interpolation)`): position and
+scale linear, the angle the short way, image and painter order from the latest tick.
+`GameRuntime` sets the interpolation after every host update from the time since the frame was
+presented (0 at the present, 1 when the next tick is due), so the view runs one tick (50 ms)
+behind the simulation. The original's screen projection is interpolated, not re-projected from
+the 3D state: at the ticks the picture stays exactly the original's, and every sprite producer
+is covered. A new object in a reused slot is not paired (`SpaceObject.SpawnId`, a port addition
+the simulation never reads); engine flames and turrets, which are re-created every tick, take
+their parent sprite's motion; the target brackets and the lock spiral are sprites tied to the
+target, so they stay on it. Cockpit, HUD text and radar still change at the ticks. Headless runs
+show the latest tick; `wc1tool snap --interpolate` shows what the window shows at the given
+time. Details in `analysis/rendering.md` §4.3.
 
 ## ADR-018: The cursor follows the mouse between presents
 Accepted 2026-10-08 (user report: the menu cursor lagged). The game presents 16 frames per

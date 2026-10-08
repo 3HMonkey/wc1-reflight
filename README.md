@@ -17,6 +17,7 @@ renderer, sharp ships and text at any screen resolution, and the original music 
 | Platform | DOS (today: DOSBox or the Kilrathi Saga build) | Native Windows, Linux and macOS; one NativeAOT executable, no emulator |
 | Rendering | 320x200, 256 colours | Vulkan renderer (MoltenVK on macOS) with SDL fallback; resizable window, fullscreen, 4:3 aspect correction or square pixels, nearest / sharp-bilinear / linear filtering, integer scaling, vsync |
 | Ships in space | Pixel sprites scaled inside 320x200 | Ships, missiles, explosions and asteroids are drawn at your screen resolution (smooth scaling and rotation, far sharper ship models); the cockpit and HUD stay pixel-exact on top |
+| Motion | The space view moves in steps, at most 20 per second | Ships, shots, stars and the target brackets glide at your display's refresh rate (60, 144 Hz ...), between the game's 20 simulation steps per second |
 | Text | Four pixel fonts | All text drawn at screen resolution: crisp vectorized originals or modern replacement fonts (see [Fonts](#fonts)); text drawn into off-screen buffers (space view, scenes, saved backgrounds) is followed too |
 | Help | Printed manual | **F10** shows the flight controls next to the cockpit (in the side margins of widescreen displays, otherwise as a panel) |
 | Menus | None | **Esc** opens a pause menu (in flight, in the rooms and on the title) with **settings**: volumes, fullscreen, filter, aspect ratio, vsync, sharp text, fonts, key help and **flight keys** (every flight control can be put on another key); saved in `config.json` |

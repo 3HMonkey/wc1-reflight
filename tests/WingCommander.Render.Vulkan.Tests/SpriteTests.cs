@@ -26,6 +26,45 @@ public sealed class SpriteTests(OffscreenRendererFixture fixture) : VulkanTestBa
         Assert.True(ambiguous <= maxAmbiguousFraction * image.Width * image.Height, $"{ambiguous} ambiguous pixels");
     }
 
+    [VulkanTheory]
+    [InlineData(0f)]
+    [InlineData(0.37f)]
+    [InlineData(0.5f)]
+    [InlineData(1f)]
+    public void InterpolatedSprites_AreDrawnBetweenTheirTicks(float interpolation)
+    {
+        var renderer = Square();
+        var scene = new SpriteScene();
+        SpriteImageKey ship = scene.AddImage(1, 21, 13, originX: 10, originY: 6);
+        ref SpriteInstance moving = ref scene.Add(ship, 140, 80, angle: 20, scale: 1.5f);
+        moving.HasPrevious = true;
+        moving.PreviousX = 100;
+        moving.PreviousY = 60;
+        moving.PreviousAngle = 350;
+        moving.PreviousScale = 1;
+        scene.Add(ship, 250, 150); // no state of the tick before: always where the tick put it
+
+        // A HUD line: one stretched pixel, moving with its object.
+        var pixel = SpriteImageKey.Create(-1, 0, 42);
+        scene.Images.Set(pixel, new SpriteImage(1, 1, 0, 0, new byte[] { 42 }));
+        ref SpriteInstance line = ref scene.Add(pixel, 60.5f, 120);
+        line.Scale = 20;
+        line.ScaleY = 1;
+        line.HasPrevious = true;
+        line.PreviousX = 40.5f;
+        line.PreviousY = 110;
+        line.PreviousScale = 12;
+        line.PreviousScaleY = 1;
+
+        scene.Frame.Interpolation = interpolation;
+        CapturedImage image = Render(renderer, scene);
+        AssertMatchesReference(scene, image, Square3x, maxAmbiguousFraction: 0.01);
+
+        // The line's middle pixel (it spans x 51..70 at the tick, 35..46 one tick before).
+        float x = 40.5f + (60.5f - 40.5f) * interpolation, y = 110 + 10 * interpolation;
+        Assert.Equal(TestPatterns.Rgb(scene.Palette, 42), image.GetRgb((int)(3 * (x + 0.5f)), (int)(3 * (y + 0.5f))));
+    }
+
     [VulkanFact]
     public void UnscaledSprites_HaveTheSoftwareFootprint()
     {

@@ -3,6 +3,29 @@
 Newest entry first. Each entry: date, what was done, what was learned, what is next.
 Subsystem details live in `progress/*.md`; this file is the project journal.
 
+## 2026-10-08 — Session 3 (night): smooth flight (R2b)
+
+### Done
+- ADR-019: the space view moves at the display rate. Sprites carry their state of the tick before
+  (`SpriteInstance.HasPrevious`/`Previous*`, `At(t)`), paired by slot, occurrence and
+  `SpawnId` (new port field of `SpaceObject`, set whenever a slot gets a new object); engine
+  flames and turrets follow their parent's sprite; target brackets (stretched one-pixel sprites)
+  and the lock spiral are sprites tied to the target. `SpaceView.PresentedAt`/`TickMilliseconds`,
+  `GameRuntime` sets `RenderFrame.Interpolation` after every update; the Vulkan sprite pass and the
+  CPU reference draw `At(Interpolation)` (with a separate vertical scale).
+- wc1tool `snap --interpolate`: renders what the window shows at the given time (checked: bolts,
+  ships, flames and brackets halfway between two ticks).
+- Noticed while testing (unchanged, as in the Kilrathi Saga code): the guns fire on key-repeat events, so
+  pressing a turn key while Space is held stops the auto-repeat and the guns (turn first, then
+  fire, works).
+- Tests: Core 65, Graphics 180, Audio 240, Simulation 418, Render.Vulkan 106, Game 272,
+  Game.Flight 242 (1,523) — all green.
+
+### Next
+- Widened backgrounds (16:9 / 16:10) once the outpainted pictures are back.
+- Joystick/gamepad layer and its bindings (possibly guns that fire while held, independent of key
+  repeat); playtesting; R3 meshes, R4 ray tracing.
+
 ## 2026-10-08 — Session 3 (late): flight keys, briefing board, smooth cursor
 
 ### Done

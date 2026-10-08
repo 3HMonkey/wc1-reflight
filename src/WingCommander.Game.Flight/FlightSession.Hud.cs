@@ -418,20 +418,21 @@ internal sealed partial class FlightSession
         var buffer = SpaceBuffer;
         if (solid)
         {
-            Gfx.DrawViewportBorder(buffer, bounds.Left, bounds.Top, bounds.Right, bounds.Bottom, colour);
+            if (!TryRecordBorder(bounds, colour, obj))
+                Gfx.DrawViewportBorder(buffer, bounds.Left, bounds.Top, bounds.Right, bounds.Bottom, colour);
         }
         else
         {
             short segment = (short)((bounds.Right - bounds.Left) / 6 + 1);
-            Gfx.DrawViewportLine(buffer, bounds.Left, bounds.Top, bounds.Left + segment, bounds.Top, colour);
-            Gfx.DrawViewportLine(buffer, bounds.Left, bounds.Bottom, bounds.Left + segment, bounds.Bottom, colour);
-            Gfx.DrawViewportLine(buffer, bounds.Right, bounds.Top, bounds.Right - segment, bounds.Top, colour);
-            Gfx.DrawViewportLine(buffer, bounds.Right, bounds.Bottom, bounds.Right - segment, bounds.Bottom, colour);
+            DrawBracketLine(bounds.Left, bounds.Top, bounds.Left + segment, bounds.Top, colour, obj);
+            DrawBracketLine(bounds.Left, bounds.Bottom, bounds.Left + segment, bounds.Bottom, colour, obj);
+            DrawBracketLine(bounds.Right, bounds.Top, bounds.Right - segment, bounds.Top, colour, obj);
+            DrawBracketLine(bounds.Right, bounds.Bottom, bounds.Right - segment, bounds.Bottom, colour, obj);
             segment = (short)((bounds.Bottom - bounds.Top) / 6 + 1);
-            Gfx.DrawViewportLine(buffer, bounds.Left, bounds.Top, bounds.Left, bounds.Top + segment, colour);
-            Gfx.DrawViewportLine(buffer, bounds.Left, bounds.Bottom, bounds.Left, bounds.Bottom - segment, colour);
-            Gfx.DrawViewportLine(buffer, bounds.Right, bounds.Top, bounds.Right, bounds.Top + segment, colour);
-            Gfx.DrawViewportLine(buffer, bounds.Right, bounds.Bottom, bounds.Right, bounds.Bottom - segment, colour);
+            DrawBracketLine(bounds.Left, bounds.Top, bounds.Left, bounds.Top + segment, colour, obj);
+            DrawBracketLine(bounds.Left, bounds.Bottom, bounds.Left, bounds.Bottom - segment, colour, obj);
+            DrawBracketLine(bounds.Right, bounds.Top, bounds.Right, bounds.Top + segment, colour, obj);
+            DrawBracketLine(bounds.Right, bounds.Bottom, bounds.Right, bounds.Bottom - segment, colour, obj);
         }
         if (drawLockMarker)
         {
@@ -443,7 +444,8 @@ internal sealed partial class FlightSession
                     sim.TargetLockMarkerAngle = unchecked((short)(sim.TargetLockMarkerAngle + player.RollRotation + player.PitchRotation));
                     centerX = unchecked((short)(centerX + (FixedMath.Cos(sim.TargetLockMarkerAngle) * sim.TargetLockCountdown * 2 >> 8)));
                     centerY = unchecked((short)(centerY + (FixedMath.Sin(sim.TargetLockMarkerAngle) * sim.TargetLockCountdown * 2 >> 8)));
-                    Gfx.DrawSpriteDefault(buffer, centerX, centerY, TargetLockShape, 1);
+                    if (!TryRecordSpaceSprite(TargetLockShape, 1, centerX, centerY, 0, 0x100, 0, obj))
+                        Gfx.DrawSpriteDefault(buffer, centerX, centerY, TargetLockShape, 1);
                     _targetLockMarkerX = centerX;
                     _targetLockMarkerY = centerY;
                 }
@@ -459,6 +461,31 @@ internal sealed partial class FlightSession
             saved.Left = -0x7fff;
         else
             saved = bounds;
+    }
+
+    /// <summary>
+    /// One bracket stroke: a sprite tied to the object while the renderer draws the space view (it
+    /// moves with the object between ticks, R2b), otherwise a line in the space buffer. Erasing
+    /// (the space colour) always draws, which is harmless where nothing was drawn.
+    /// </summary>
+    private void DrawBracketLine(int x0, int y0, int x1, int y1, byte colour, int obj)
+    {
+        if (colour == PaletteColours.PrimaryViewBuffer || !TryRecordLineSprite(x0, y0, x1, y1, colour, obj))
+            Gfx.DrawViewportLine(SpaceBuffer, x0, y0, x1, y1, colour);
+    }
+
+    /// <summary>The solid lock-mode frame as four line sprites (see <see cref="DrawBracketLine"/>); false when the CPU draws it.</summary>
+    private bool TryRecordBorder(BracketBounds bounds, byte colour, int obj)
+    {
+        if (colour == PaletteColours.PrimaryViewBuffer || !TryRecordLineSprite(bounds.Left, bounds.Top, bounds.Right, bounds.Top, colour, obj))
+            return false;
+        TryRecordLineSprite(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, colour, obj);
+        if (bounds.Bottom - bounds.Top > 1)
+        {
+            TryRecordLineSprite(bounds.Left, bounds.Top + 1, bounds.Left, bounds.Bottom - 1, colour, obj);
+            TryRecordLineSprite(bounds.Right, bounds.Top + 1, bounds.Right, bounds.Bottom - 1, colour, obj);
+        }
+        return true;
     }
 
     /// <summary>

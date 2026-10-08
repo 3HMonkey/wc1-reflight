@@ -133,6 +133,9 @@ Game code (ported screens) stays sequential, written as async coroutines:
   index) and publishes it with each present; the Vulkan sprite pass draws them at output
   resolution where the classic frame shows the space background inside the window mask. Without
   an R2 renderer (SDL_Renderer, headless) or with `--classic-space` the CPU draws them.
+  R2b (ADR-019): each sprite also carries its state of the tick before, and the renderer draws it
+  between the two ticks (`RenderFrame.Interpolation`, set by `GameRuntime` after every host
+  update), so flight motion is smooth at any display rate.
 - Text at output resolution (ADR-013): `Graphics.Text.TextLayerTracker` follows every glyph the
   game draws (and the raster copies that move it) and publishes `RenderFrame.Text` with each
   present; the Vulkan text pass draws the glyphs from distance fields (vectorized originals or

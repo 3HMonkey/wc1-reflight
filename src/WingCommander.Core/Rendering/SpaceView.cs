@@ -35,4 +35,14 @@ public sealed class SpaceView
 
     /// <summary>3D state of the tick before <see cref="Current"/>.</summary>
     public SpaceViewState? Previous { get; set; }
+
+    /// <summary>Virtual time (milliseconds) the frame was presented (R2b).</summary>
+    public double PresentedAt { get; set; }
+
+    /// <summary>Length of a simulation tick in milliseconds (R2b); 0 = no interpolation.</summary>
+    public double TickMilliseconds { get; set; }
+
+    /// <summary>How far the display is from the previous tick (0) to this one (1) at <paramref name="now"/>.</summary>
+    public float InterpolationAt(double now) =>
+        TickMilliseconds > 0 ? (float)Math.Clamp((now - PresentedAt) / TickMilliseconds, 0.0, 1.0) : 1f;
 }

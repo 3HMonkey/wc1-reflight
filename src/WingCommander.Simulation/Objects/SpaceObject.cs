@@ -118,6 +118,13 @@ public struct SpaceObject
     /// <summary>asShipAccumulatedDamage: projectile payload, ship internal damage events, asteroid damage.</summary>
     public short AccumulatedDamage;
 
+    /// <summary>
+    /// Port addition (R2b): a new number whenever the slot is given to a new object, so renderers
+    /// can tell an object's next tick from a new object in a reused slot. The simulation never
+    /// reads it.
+    /// </summary>
+    public int SpawnId;
+
     /// <summary>Sets the basis to identity and clears the rotation rates.</summary>
     /// <remarks>C: init_ijk (0x418F60, geom.c).</remarks>
     public void InitIjk()

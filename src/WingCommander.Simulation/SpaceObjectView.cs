@@ -15,6 +15,9 @@ public struct SpaceObjectView
     /// <summary>Object slot (the object's identity while it lives; slots are reused).</summary>
     public short Slot;
 
+    /// <summary>Changes whenever the slot is given to a new object (<see cref="SpaceObject.SpawnId"/>).</summary>
+    public int SpawnId;
+
     public ObjectType Type;
 
     public ObjectClass Class;

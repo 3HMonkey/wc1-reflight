@@ -48,7 +48,8 @@ wc1 [--game <dir>] [--scale N] [--fullscreen|--window] [--filter nearest|sharp|l
 - With the Vulkan renderer, text is drawn at output resolution with the bundled replacement fonts
   (ADR-013); `--classic-text` keeps the pixel text, `--original-fonts` the vectorized originals.
   F10 toggles the key help in flight.
-- With the Vulkan renderer, space objects are drawn as sprites at output resolution (R2);
+- With the Vulkan renderer, space objects are drawn as sprites at output resolution (R2) and
+  move at the display's refresh rate between the 20 Hz simulation steps (R2b);
   `--classic-space` draws them into the 320x200 frame like the original. `--ks-literal` turns off
   the visual fixes of ADR-012 (planets, VDU static, cockpit explosion, Esc pause, credit count).
 

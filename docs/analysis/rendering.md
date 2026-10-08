@@ -206,7 +206,7 @@ calls back. All types are reusable (no per-frame allocation when the producer re
 public sealed class RenderFrame                    // existing; additive member:
 {
     public ClassicLayer Classic { get; }
-    public float Interpolation { get; set; }       // 0..1 between Previous and Current snapshot
+    public float Interpolation { get; set; } = 1;  // 0..1 from the tick before to the latest (R2b, §4.3)
     public SpaceView? Space { get; set; }          // null: classic only (R1 behaviour, wc1 today)
 }
 
@@ -216,8 +216,10 @@ public sealed class SpaceView                      // the space window of one di
     public SpriteImageCache Images { get; set; }   // decoded indexed sprite frames (shared, long-lived)
     public SpaceViewMask? WindowMask { get; set; } // cockpit window mask; null = whole screen
     public byte BackgroundIndex { get; set; }      // 0xBF: sprites only replace these classic pixels
-    public SpaceViewState? Current { get; set; }   // R2b/R3: 3D state of the last 20 Hz tick
+    public SpaceViewState? Current { get; set; }   // R3: 3D state of the last 20 Hz tick
     public SpaceViewState? Previous { get; set; }  // tick before (interpolation)
+    public double PresentedAt, TickMilliseconds;   // R2b: virtual time of the present, tick length
+    public float InterpolationAt(double now);      // clamp((now - PresentedAt) / TickMilliseconds, 0, 1)
 }
 ```
 
@@ -255,8 +257,12 @@ public struct SpriteInstance                       // one draw, in logical 320x2
     public float X, Y;                             // screen pixel of the hot spot (sub-pixel allowed)
     public float Angle;                            // degrees, clockwise on screen (asObjectScreenAngle)
     public float Scale;                            // 1 = 0x100 (asObjectScreenScale / 256)
+    public float ScaleY;                           // vertical scale when it differs (HUD lines); 0 = Scale
     public SpriteFlip Flip;
-    public short ObjectSlot;                       // simulation slot or -1 (R3 mesh replacement)
+    public short ObjectSlot;                       // simulation slot or -1 (pairing, R3 mesh replacement)
+    public bool HasPrevious;                       // R2b: state of the same sprite one tick earlier
+    public float PreviousX, PreviousY, PreviousAngle, PreviousScale, PreviousScaleY;
+    public SpriteInstance At(float t);             // between the ticks (§4.3)
 }
 
 public sealed class SpriteDrawList                 // reusable array + Count, Clear()/Add()
@@ -275,7 +281,7 @@ public sealed class SpaceViewMask                  // 320x200 bytes, non-zero = 
 Semantics (identical to the software path at 1:1): frame pixel (i, j) of an unscaled, unrotated,
 unflipped sprite lands on screen pixel (X - OriginX + i, Y - OriginY + j). Scale, flip and
 rotation act around the centre of the hot-spot pixel: a sprite-space point p (pixels relative to
-the hot spot centre) goes to `(X, Y) + R(Angle) * Scale * F * p` with
+the hot spot centre) goes to `(X, Y) + R(Angle) * S * F * p` with `S = diag(Scale, ScaleY or Scale)`,
 `R = [cos -sin; sin cos]` (y down, clockwise) and `F = diag(flipX ? -1 : 1, flipY ? -1 : 1)`;
 cos/sin are taken from the original 0.1 degree table (`round(cos * 65536) / 65536`).
 
@@ -301,7 +307,7 @@ simulation's. Game converts once per tick (64 objects, no allocation):
 | `Camera.NearRadius`, `FocalLength` | `CameraNearRadius`, `(ScreenWidth & ~1) / 2` |
 | `Camera.CenterX/Y`, `Viewport` | view geometry origin + `ViewCenterX/Y`; geometry rectangle (Game) |
 | `Objects[i]` (+ `DrawOrder` as indices) | `ActiveObjects[i]` (+ `DrawOrder` as slots -> indices) |
-| `Slot`, `Type`, `Class`, `Owner` | `Slot`, `(short)Type`, `(short)Class`, `Owner` |
+| `Slot`, `SpawnId`, `Type`, `Class`, `Owner` | `Slot`, `SpawnId`, `(short)Type`, `(short)Class`, `Owner` |
 | `Visible`, `IsNavPointer`, `IsSkyObject` | `Visible`, `IsNavPointer`, `Class` is Star or Planet |
 | `Position`, `Velocity`, `Right/Up/Forward`, `ViewPosition` | same fields, converted to float |
 | `Scale`, `CollisionRadius` | `Scale / 256f`, `CollisionRadius` |
@@ -323,8 +329,9 @@ public sealed class SpaceViewState                 // one 20 Hz tick, reusable
 ```
 
 Ownership: Game converts the simulation snapshot into `Current` once per tick (after copying the
-old `Current` into `Previous`) and sets `RenderFrame.Interpolation` from the scheduler (time since
-the tick / 50 ms, clamped 0..1). Everything is read-only for the renderer. The sprite list of §3.1
+old `Current` into `Previous`); `GameRuntime` sets `RenderFrame.Interpolation` after every host
+update from the scheduler (`SpaceView.InterpolationAt`: time since the present / 50 ms, clamped
+0..1). Everything is read-only for the renderer. The sprite list of §3.1
 is built from the same data (`DrawOrder`, `Sprite`, `Flip`, `ScreenX/Y`, `ScreenScale`,
 `ScreenAngle`), so both views of a tick always agree.
 
@@ -365,25 +372,61 @@ software fallback covers it). Counters: `SpritesDrawn`, `SpriteUploads`, `AtlasR
 
 ### 4.2 Why this order of tests
 
-- HUD/cockpit on top for free: any classic pixel that is not 0xBF wins, including the brackets and
-  text the game draws into the space buffer after the sprites, the software cursor, cockpit
-  explosions and software-fallback sprites.
+- HUD/cockpit on top for free: any classic pixel that is not 0xBF wins, including text the game
+  draws into the space buffer after the sprites, the software cursor, cockpit explosions and
+  software-fallback sprites. (The target brackets and the lock spiral are sprites themselves since
+  R2b, §4.3, drawn after the objects.)
 - Caveat inherited from the reference: a software pixel that happens to be 0xBF lets sprites show
   through (never seen in practice; a dedicated "HUD coverage" mask from the Game would remove it).
 - Palette effects need nothing extra: the 0xBF flash, entries 185..190 and fades change the
   palette image, which both passes read at draw time.
 
-### 4.3 Interpolation (R2b, display-rate motion)
+### 4.3 Interpolation (R2b, display-rate motion; ADR-019)
 
-The simulation stays at 20 Hz. With `Previous` and `Current` snapshots the renderer can draw at
-display rate: for each object in `Current.DrawOrder` with the same `Slot` in `Previous`,
-interpolate the camera (position lerp, basis slerp) and the object position, project with the
-original formula (`x = CenterX + FocalLength * view.x / view.z`, same for y, no y flip; scale
-`ScreenScale * distance_ratio`), keep view frame / flip / angle from `Current` (discrete, like the
-original). Objects without a predecessor (spawned, re-slotted) or with a jump in position (warp,
-respawned dust) use `Current` unchanged. HUD brackets stay at the integer 20 Hz positions in the
-classic layer; with interpolation they can lag a sprite by up to one tick (accepted, as in the
-reference port they differ by <= 1 logical pixel).
+The simulation stays at 20 Hz; the renderer draws the space view between the last two ticks. As
+built, the sprites themselves are interpolated in screen space (the original's own projection);
+they are not re-projected from the 3D state:
+
+- **Pairing** (Game, `FlightSession.SpaceSprites`): while a frame is recorded, each sprite looks up
+  its partner in the frame shown before: same `ObjectSlot`, same occurrence of that slot in the
+  frame (an object's own sprite first, then its HUD marks), same object
+  (`SpaceObjectState.SpawnId`), same kind (image, horizontal or vertical line), at most 64 logical
+  pixels away. Frames pair only when they continue each other: 1-4 ticks apart, same camera view,
+  same window and clip, view directions within about 25 degrees. A paired sprite gets
+  `HasPrevious` and the partner's `PreviousX/Y/Angle/Scale/ScaleY`.
+- **Spawn ids**: slots are reused when objects die, often within the same tick (a new bolt in a
+  dead bolt's slot). `SpaceObject.SpawnId` is a port addition that changes whenever a slot gets a
+  new object (`SetObjectsData`, `FindVacant3dObject`, star placement); the simulation never reads it.
+- **Fixed children**: engine flames and capital-ship turrets are new objects every tick, placed
+  relative to their parent (`reposition_fixed_child_objects`). They take the motion of the parent's
+  sprite: their previous position is the parent's previous position plus the current offset,
+  turned by the parent's turn and scaled by its change of scale; angle and scale likewise.
+- **HUD marks**: the target brackets are recorded as sprites of a synthetic one-pixel image per
+  colour (`SpriteImageKey(-1, 0, colour)`, stretched with `Scale`/`ScaleY`), the lock spiral as the
+  cockpit shape, both tied to the target's slot, so they move with it. Erasing (space colour) and
+  the CPU path draw lines as before; the CPU composer (`ComposeSpaceSprites`) fills the stretched
+  pixels as rectangles.
+- **Drawing**: `SpriteInstance.At(t)`: position and scale linear, the angle the short way; image,
+  flip and painter order from the latest tick. Sprites without a partner (new objects, cuts,
+  slot -1 extras) are drawn as recorded.
+- **Timing**: the flight stamps a published frame with its present time (`SpaceView.PresentedAt`,
+  virtual clock) and the tick length (`TickMilliseconds` = 50). After every host update
+  `GameRuntime` sets `RenderFrame.Interpolation = clamp((now - PresentedAt) / 50, 0, 1)`: at a
+  present the view shows the tick before and reaches the new tick when the next one is due, so the
+  motion is even at any display rate for one tick (50 ms) of latency. The classic layer (cockpit,
+  HUD text, radar) changes at the ticks. Headless runs keep `Interpolation = 1`;
+  `wc1tool snap --interpolate` renders what the window shows at the given time.
+
+Why screen space: at t = 1 the picture is exactly the original's (integer projection, sky objects,
+nav pointer, canned scenes, attract mode) and every sprite producer is covered without extra math.
+Within one 50 ms tick the difference to a perspective-correct re-projection is small; it shows only
+for objects passing very close to the camera. R3 meshes will use `SpaceViewState.Previous/Current`
+for real 3D interpolation (camera position lerp and basis slerp, object transforms).
+
+Verified by `SpriteInterpolationTests` (Core), `InterpolatedSprites_AreDrawnBetweenTheirTicks`
+(Vulkan against the CPU reference at t = 0, 0.37, 0.5, 1), `SpaceSpriteTests` (pairing; brackets
+composed like the CPU draws them) and `SmoothFlightTests` (a turn at 144 Hz moves the stars on
+every display frame; flames stay on their ships).
 
 ### 4.4 Game wiring (open)
 
@@ -470,5 +513,6 @@ classic layer is then converted from sRGB to the output colour space with a pape
   rasteriser for unrotated sprites; rotated/scaled sprites differ at texel boundaries (the
   original resamples with its own integer stepping). Accepted for output-resolution rendering.
 - The 0xBF test makes a 0xBF-coloured HUD pixel transparent (reference behaviour).
-- Interpolated sprites vs. integer HUD brackets (<= 1 tick lag); option to disable interpolation.
+- Interpolated sprites vs. HUD marks: resolved in R2b by drawing the brackets and the lock spiral as
+  sprites (§4.3). `--classic-space` turns off the sprite path and with it the interpolation.
 - glTF loader AOT status must be verified by a publish probe before R3 starts.
